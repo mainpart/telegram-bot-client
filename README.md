@@ -78,7 +78,10 @@ The script is controlled via command-line arguments. The primary actions are fet
 
 **Core Arguments**:
 *   `--chat <id>`: The username or ID of the chat to interact with.
-*   `--fromId <id>`: Fetch messages that are older than the specified message ID.
+*   `--fromId <id>`: Стартовый ID сообщения (исключается из выборки).
+*   `--toId <id>`: Конечный ID сообщения. По умолчанию исключается из выборки.
+*   `--inclusive`: Включать граничные сообщения `fromId` и/или `toId` в выборку.
+*   `--forward` / `--backward`: Можно указывать с `--fromId` или без него. Без `--fromId` — чтение соответственно с начала (old→new) или с конца (new→old).
 *   `--limit <number>`: Fetch a specific number of messages.
 *   `--profile <name>`: Apply a filtering profile from `profiles.json`.
 *   `--search <query>`: Perform a global search for a text query.
@@ -144,11 +147,25 @@ python3 telegram_bot_client.py --chat "Trofei Gorgony 18+" --addReaction "🔥" 
 python3 telegram_bot_client.py --chat "Trofei Gorgony 18+" --sendFiles document.pdf --replyTo 12345
 ```
 
-The script will output the ID of the last message received. You can use this ID with the `--fromId` argument to get the next "page" of older messages.
+The script will output the ID of the last message received. You can use this ID with the `--fromId` argument to get the next "page" of messages.
 
 ```bash
-# Get the next page of messages
-python3 telegram_bot_client.py --chat "Trofei Gorgony 18+" --fromId <last_message_id> --limit 100
+# Get the next page of older messages (backward from a starting ID)
+python3 telegram_bot_client.py --chat "Trofei Gorgony 18+" --fromId <last_message_id> --backward --limit 100
+
+# Read newer messages starting after a given ID (forward)
+python3 telegram_bot_client.py --chat "Trofei Gorgony 18+" --fromId <some_message_id> --forward --limit 100
+
+# Read a range (exclusive) from fromId to toId, forward (IDs in (fromId, toId))
+python3 telegram_bot_client.py --chat "Trofei Gorgony 18+" --fromId 1000 --toId 2000 --forward --limit 200
+
+# Include boundaries (IDs in [fromId, toId])
+python3 telegram_bot_client.py --chat "Trofei Gorgony 18+" --fromId 1000 --toId 2000 --forward --inclusive
+
+# Read a range (exclusive) backward (IDs in (toId, fromId))
+python3 telegram_bot_client.py --chat "Trofei Gorgony 18+" --fromId 2000 --toId 1000 --backward --limit 200
+
+# Порядок вывода определяется Telethon и направлением (reverse). Явной сортировки нет.
 ```
 
 ## Profiles
@@ -182,8 +199,11 @@ python3 telegram_bot_client.py --chat <username>
 # Get the last 50 messages
 python3 telegram_bot_client.py --chat <username> --limit 50
 
-# Get messages older than a specific message ID
-python3 telegram_bot_client.py --chat <username> --from-id 12345
+# Get messages around a specific message ID
+# Older side (backward):
+python3 telegram_bot_client.py --chat <username> --fromId 12345 --backward --limit 50
+# Newer side (forward):
+python3 telegram_bot_client.py --chat <username> --fromId 12345 --forward --limit 50
 ```
 
 ### 2. Subscribe to Real-Time Messages

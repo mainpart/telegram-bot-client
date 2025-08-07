@@ -110,57 +110,103 @@ def cleanup_json(obj, profile_name="default"):
 # --- Core Functions ---
 async def get_updates(client, chat, from_id, limit, args):
     """Fetches and prints messages from a chat."""
-    if not limit and not from_id:
-        limit = 20
-        logger.info(f"No --limit or --from-id specified. Fetching the last {limit} messages by default.")
-
-    if limit:
-        logger.info(f"Fetching the last {limit} messages from '{chat}'.")
-    elif from_id:
-        logger.info(f"Fetching messages from '{chat}' older than message ID {from_id}.")
+    # Normalize limit: 0 -> unlimited (None for Telethon), None -> default 20
+    if limit is None:
+        limit_effective = 20
+        logger.info(f"No --limit specified. Using default limit {limit_effective}.")
+    elif limit == 0:
+        limit_effective = None
+        logger.info("--limit 0 specified. Fetching without limit (may take a long time).")
     else:
-        # When no limit or from_id is specified, telethon has a default limit.
-        logger.info(f"Fetching the most recent messages from '{chat}'.")
+        limit_effective = limit
+
+    if from_id:
+        if args.forward:
+            if args.toId:
+                logger.info(f"Fetching forward from {from_id} up to (excl) {args.toId} in '{chat}'.")
+            else:
+                logger.info(f"Fetching messages from '{chat}' forward (newer) starting after ID {from_id}.")
+        elif args.backward or not (args.forward or args.backward):
+            if args.toId:
+                logger.info(f"Fetching backward from {from_id} down to (excl) {args.toId} in '{chat}'.")
+            else:
+                logger.info(f"Fetching messages from '{chat}' backward (older) starting before ID {from_id}.")
+    else:
+        if args.forward:
+            logger.info(f"Fetching messages from '{chat}' forward from the beginning (oldest -> newest).")
+        elif args.backward:
+            logger.info(f"Fetching messages from '{chat}' backward from the end (newest -> oldest).")
+        else:
+            logger.info(f"Fetching messages from '{chat}' with default direction.")
 
     try:
-        messages_list = []
-        # Fetch messages (newest to oldest by default)
+        # Build fetch parameters
         kwargs = {}
-        if limit:
-            kwargs['limit'] = limit
-        if from_id:
-            kwargs['offset_id'] = from_id
+        if limit_effective is not None:
+            kwargs['limit'] = limit_effective
+        # Decide direction: if both fromId and toId given, infer and override user flags if conflicting
+        direction = None
+        to_id = getattr(args, 'toId', None)
+        if from_id is not None and to_id is not None and from_id != to_id:
+            inferred = 'forward' if to_id > from_id else 'backward'
+            if args.forward and inferred == 'backward':
+                logger.warning("Direction overridden by range: using backward due to --fromId/--toId order.")
+            if args.backward and inferred == 'forward':
+                logger.warning("Direction overridden by range: using forward due to --fromId/--toId order.")
+            direction = inferred
+        else:
+            if args.forward:
+                direction = 'forward'
+            elif args.backward:
+                direction = 'backward'
+
+        # Set reverse flag based on direction or default behaviour
+        if direction == 'forward':
+            kwargs['reverse'] = True
+        elif direction == 'backward':
+            kwargs['reverse'] = False
+        else:
+            # Default Telethon behaviour: newest -> oldest
+            if args.forward:
+                kwargs['reverse'] = True
+            elif args.backward:
+                kwargs['reverse'] = False
+
+        # Compute range bounds respecting inclusivity
+        inclusive = bool(getattr(args, 'inclusive', False))
+        if kwargs.get('reverse', False):
+            # forward: min_id (lower), max_id (upper), Telethon treats bounds as exclusive
+            if from_id is not None:
+                kwargs['min_id'] = max(0, from_id - 1) if inclusive else from_id
+            if to_id is not None:
+                kwargs['max_id'] = (to_id + 1) if inclusive else to_id
+        else:
+            # backward: max_id (upper), min_id (lower)
+            if from_id is not None:
+                kwargs['max_id'] = (from_id + 1) if inclusive else from_id
+            if to_id is not None:
+                kwargs['min_id'] = max(0, to_id - 1) if inclusive else to_id
+        # If no from_id provided, keep Telethon defaults (newest -> oldest)
+        printed_any = False
         async for message in client.iter_messages(chat, **kwargs):
-            messages_list.append(message)
-        
-        if not messages_list:
+            message_dict = json.loads(message.to_json())
+
+            # Apply command-line filters
+            if not apply_message_filters(message_dict, args):
+                continue
+
+            cleaned_msg = cleanup_json(message_dict, args.profile)
+            if cleaned_msg:
+                print(json.dumps(cleaned_msg, indent=2, ensure_ascii=False))
+                printed_any = True
+
+        if not printed_any:
             if from_id:
                 logger.warning(f"No messages found starting from ID {from_id}. This might indicate:")
                 logger.warning("1. The message ID doesn't exist in this chat")
                 logger.warning("2. The chat was migrated to a channel (old message IDs become invalid)")
                 logger.warning("3. All messages from that ID are older than available history")
             print("[]")
-            return
-
-        # The ID for the next page is the ID of the OLDEST message from this batch.
-        # Since we fetched newest-to-oldest, the oldest is the last one in the list.
-        next_from_id = messages_list[-1].id
-        
-        messages_json = []
-        # Reverse the list to process and print in chronological order (oldest to newest)
-        for message in reversed(messages_list):
-            message_dict = json.loads(message.to_json())
-            
-            # Apply command-line filters
-            if not apply_message_filters(message_dict, args):
-                continue
-                
-            cleaned_msg = cleanup_json(message_dict, args.profile)
-            if cleaned_msg:
-                messages_json.append(cleaned_msg)
-        
-        print(json.dumps(messages_json, indent=2, ensure_ascii=False))
-        print(f"\n# Next --from-id value to use: {next_from_id}")
 
     except Exception as e:
         logger.error(f"An error occurred during get_updates: {e}")
@@ -355,8 +401,12 @@ async def main():
     
     parser.add_argument('--chat', type=str, help='Chat username or ID (for non-listening actions).')
     parser.add_argument('--fromId', type=int, help='Fetch messages older than this message ID.')
+    parser.add_argument('--toId', type=int, help='Exclusive boundary message ID to stop before when reading a range.')
+    parser.add_argument('--inclusive', action='store_true', help='Include boundary messages specified by --fromId/--toId in the range.')
     parser.add_argument('--limit', type=int, help='Fetch a specific number of items (e.g., messages or chats).')
     parser.add_argument('--profile', type=str, default='default', help='Name of the filtering profile to apply to the output.')
+    parser.add_argument('--forward', action='store_true', help='When used with --fromId, read newer messages (IDs greater than fromId).')
+    parser.add_argument('--backward', action='store_true', help='When used with --fromId, read older messages (IDs less than fromId).')
     parser.add_argument('--sendMessage', type=str, help='Text of message to send.')
     parser.add_argument('--sendFiles', nargs='+', help='Files to send (photos, videos, documents). Can specify multiple files.')
     parser.add_argument('--replyTo', type=int, help='Message ID to reply to.')
@@ -385,6 +435,11 @@ async def main():
     # Validate mutually exclusive filter options
     if args.incoming_only and args.outgoing_only:
         logger.error("--incoming-only and --outgoing-only are mutually exclusive.")
+        return
+
+    # Validate directional options (allow forward/backward without fromId)
+    if args.forward and args.backward:
+        logger.error("--forward and --backward are mutually exclusive.")
         return
 
     if not args.debug:
