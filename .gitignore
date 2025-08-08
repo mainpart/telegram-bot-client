@@ -1,1 +1,18 @@
+# Secrets and local state
 config.ini
+anon.session
+public.keys
+.venv/
+__pycache__/
+.DS_Store
+*.log
+test.txt
+ttt.code-workspace
+
+# Byte-compiled / cache
+*.pyc
+*.pyo
+
+# IDE
+.cursor/
+.vscode/

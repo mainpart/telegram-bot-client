@@ -1,0 +1,7 @@
+**
+!Dockerfile
+!requirements.txt
+!telegram_bot_client.py
+!entrypoint.sh
+!health_server.py
+!profiles.json
