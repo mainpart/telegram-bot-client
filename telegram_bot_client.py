@@ -1,7 +1,6 @@
 import asyncio
 import re
 import logging
-import configparser
 import argparse
 import json
 import sys
@@ -13,9 +12,18 @@ from telethon.errors.rpcerrorlist import SessionPasswordNeededError
 from telethon.tl.functions.messages import SearchGlobalRequest
 from telethon.tl.types import InputPeerEmpty, InputMessagesFilterEmpty
 from telethon import events
+from telethon.events import CallbackQuery
+from telethon.tl.functions.users import GetFullUserRequest
+from telethon.tl.functions.channels import GetFullChannelRequest
+from telethon.tl.functions.messages import GetFullChatRequest
+import yaml
+import aiohttp
+from motor.motor_asyncio import AsyncIOMotorClient
+from typing import Optional
 
 # --- Configuration ---
-SESSION_NAME = 'anon' 
+SESSION_NAME = 'anon'
+SESSION_NAME_BOT = 'anon-bot'
 
 # --- Setup ---
 warnings.filterwarnings("ignore", message="The session already had an authorized user.*")
@@ -24,6 +32,290 @@ logger = logging.getLogger()
 
 # --- JSON Filtering ---
 PROFILES = {}
+
+# --- Adapters ---
+ADAPTERS = []
+
+class BaseAdapter:
+    async def init(self):
+        return
+
+    async def exec(self, message: dict):
+        raise NotImplementedError
+
+class StdoutAdapter(BaseAdapter):
+    def __init__(self, config: dict):
+        self.pretty = bool(config.get('pretty', True))
+
+    async def exec(self, message: dict):
+        try:
+            if self.pretty:
+                print(json.dumps(message, indent=2, ensure_ascii=False))
+            else:
+                print(json.dumps(message, ensure_ascii=False))
+        except Exception as e:
+            logger.error(f"StdoutAdapter error: {e}")
+
+class HttpAdapter(BaseAdapter):
+    def __init__(self, config: dict):
+        self.url = config.get('url')
+        self.method = (config.get('method') or 'POST').upper()
+        self.headers = config.get('headers') or {}
+        self.timeout_seconds = int(config.get('timeout', 10))
+        self.debug = config.get('debug', False)
+        self._session: Optional[aiohttp.ClientSession] = None
+
+    async def init(self):
+        timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
+        
+        # Configure connector with connection debug info
+        connector = None
+        if self.debug:
+            # Enable connection keep-alive and debug logging
+            connector = aiohttp.TCPConnector(
+                enable_cleanup_closed=True,
+                limit=100,
+                limit_per_host=30
+            )
+            if self.debug:
+                logger.info("HttpAdapter: Initializing session with debug connector")
+        
+        self._session = aiohttp.ClientSession(
+            timeout=timeout,
+            connector=connector
+        )
+
+    async def exec(self, message: dict):
+        if not self.url:
+            logger.error("HttpAdapter: 'url' is required")
+            return
+        if not self._session:
+            await self.init()
+        try:
+            if self.debug:
+                logger.info(f"HttpAdapter: Sending {self.method} request to {self.url}")
+                logger.info(f"HttpAdapter: Headers: {self.headers}")
+                logger.info(f"HttpAdapter: Message payload size: {len(json.dumps(message))} bytes")
+            
+            async with self._session.request(self.method, self.url, json=message, headers=self.headers) as resp:
+                # Check connection info
+                if self.debug and hasattr(resp, 'connection'):
+                    connection_info = resp.connection
+                    if connection_info:
+                        logger.info(f"HttpAdapter: Connection established to {connection_info.host}:{connection_info.port}")
+                        logger.info(f"HttpAdapter: Connection is_ssl: {getattr(connection_info, 'is_ssl', 'unknown')}")
+                
+                # Optionally read response to release connection properly
+                response_text = await resp.text()
+                
+                if self.debug:
+                    logger.info(f"HttpAdapter: Response status: {resp.status}")
+                    logger.info(f"HttpAdapter: Response headers: {dict(resp.headers)}")
+                    
+                    # Check connection close headers
+                    connection_header = resp.headers.get('Connection', '').lower()
+                    if connection_header == 'close':
+                        logger.info("HttpAdapter: Server indicated connection will be closed (Connection: close)")
+                    elif connection_header == 'keep-alive':
+                        logger.info("HttpAdapter: Server indicated connection will be kept alive (Connection: keep-alive)")
+                    
+                    # Check if server supports keep-alive
+                    if 'keep-alive' in resp.headers:
+                        logger.info(f"HttpAdapter: Keep-Alive parameters: {resp.headers['keep-alive']}")
+                    
+                    logger.info(f"HttpAdapter: Response body: {response_text[:500]}{'...' if len(response_text) > 500 else ''}")
+                
+                if resp.status >= 400:
+                    logger.error(f"HttpAdapter failed with status {resp.status}")
+                    if self.debug:
+                        logger.error(f"HttpAdapter: Full response body: {response_text}")
+                
+                # Log when connection is returned to pool or closed
+                if self.debug:
+                    logger.info("HttpAdapter: Response consumed, connection handling by aiohttp")
+        except asyncio.TimeoutError as e:
+            logger.error(f"HttpAdapter timeout error: {e}")
+            if self.debug:
+                logger.error("HttpAdapter: Connection timed out - likely closed by client due to timeout")
+        except aiohttp.ClientConnectionError as e:
+            logger.error(f"HttpAdapter connection error: {e}")
+            if self.debug:
+                logger.error("HttpAdapter: Connection error - server may have closed the connection")
+        except aiohttp.ServerDisconnectedError as e:
+            logger.error(f"HttpAdapter server disconnected: {e}")
+            if self.debug:
+                logger.error("HttpAdapter: Server disconnected the connection unexpectedly")
+        except aiohttp.ClientConnectorError as e:
+            logger.error(f"HttpAdapter connector error: {e}")
+            if self.debug:
+                logger.error("HttpAdapter: Failed to establish connection - connection refused by server")
+        except Exception as e:
+            logger.error(f"HttpAdapter error: {e}")
+            if self.debug:
+                import traceback
+                logger.error(f"HttpAdapter: Full traceback: {traceback.format_exc()}")
+                # Try to determine if it's a connection-related error
+                error_str = str(e).lower()
+                if any(keyword in error_str for keyword in ['connection', 'closed', 'reset', 'refused']):
+                    logger.error("HttpAdapter: Error appears to be connection-related")
+
+    async def close(self):
+        if self._session:
+            try:
+                if self.debug:
+                    # Get connector statistics before closing
+                    connector = self._session.connector
+                    if connector and hasattr(connector, '_conns'):
+                        active_connections = sum(len(conns) for conns in connector._conns.values())
+                        logger.info(f"HttpAdapter: Closing session with {active_connections} active connections")
+                    else:
+                        logger.info("HttpAdapter: Closing session (connection count unavailable)")
+                
+                await self._session.close()
+                
+                if self.debug:
+                    logger.info("HttpAdapter: Session closed by client")
+                    
+            except Exception as e:
+                logger.error(f"HttpAdapter close error: {e}")
+                if self.debug:
+                    import traceback
+                    logger.error(f"HttpAdapter close traceback: {traceback.format_exc()}")
+            finally:
+                self._session = None
+
+class MongoDBAdapter(BaseAdapter):
+    def __init__(self, config: dict):
+        self.uri = config.get('uri')
+        self.database_name = config.get('database') or config.get('db')
+        self.collection_name = config.get('collection') or 'messages'
+        self._client: Optional[AsyncIOMotorClient] = None
+        self._collection = None
+
+    async def init(self):
+        if not self.uri or not self.database_name:
+            logger.error("MongoDBAdapter requires 'uri' and 'database'")
+            return
+        self._client = AsyncIOMotorClient(self.uri)
+        db = self._client[self.database_name]
+        self._collection = db[self.collection_name]
+
+    async def exec(self, message: dict):
+        if not self._collection:
+            await self.init()
+            if not self._collection:
+                return
+        try:
+            await self._collection.insert_one(message)
+        except Exception as e:
+            logger.error(f"MongoDBAdapter error: {e}")
+
+    async def close(self):
+        try:
+            if self._client:
+                self._client.close()
+        except Exception as e:
+            logger.error(f"MongoDBAdapter close error: {e}")
+
+async def _safe_adapter_exec(adapter: BaseAdapter, message: dict, debug: bool = False):
+    import time
+    start_time = time.time()
+    adapter_name = adapter.__class__.__name__
+    
+    try:
+        if debug:
+            logger.info(f"[DEBUG] Starting {adapter_name} execution")
+        
+        await adapter.exec(message)
+        
+        if debug:
+            execution_time = (time.time() - start_time) * 1000
+            logger.info(f"[DEBUG] {adapter_name} completed in {execution_time:.2f}ms")
+            
+    except Exception as e:
+        execution_time = (time.time() - start_time) * 1000
+        logger.error(f"Adapter {adapter_name} failed after {execution_time:.2f}ms: {e}")
+        if debug:
+            import traceback
+            logger.error(f"[DEBUG] {adapter_name} full traceback: {traceback.format_exc()}")
+
+async def emit_message_to_adapters(message: dict, debug: bool = False):
+    import time
+    start_time = time.time()
+    
+    if debug:
+        logger.info(f"[DEBUG] emit_message_to_adapters called with {len(ADAPTERS)} adapters")
+    
+    if not ADAPTERS:
+        # Fallback to console if no adapters are configured
+        if debug:
+            logger.info(f"[DEBUG] No adapters configured, falling back to console output")
+        print(json.dumps(message, indent=2, ensure_ascii=False))
+        return
+    
+    if debug:
+        logger.info(f"[DEBUG] Starting parallel execution of {len(ADAPTERS)} adapters")
+    
+    # Execute all adapters in parallel
+    tasks = [_safe_adapter_exec(a, message, debug) for a in ADAPTERS]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    if debug:
+        total_time = (time.time() - start_time) * 1000
+        failed_count = sum(1 for r in results if isinstance(r, Exception))
+        logger.info(f"[DEBUG] All adapters completed in {total_time:.2f}ms, {failed_count} failed")
+
+async def close_adapters():
+    tasks = []
+    for adapter in ADAPTERS:
+        close_coro = getattr(adapter, 'close', None)
+        if close_coro and callable(close_coro):
+            tasks.append(close_coro())
+    if tasks:
+        await asyncio.gather(*tasks, return_exceptions=True)
+
+def load_yaml_config(path: str = 'config.yaml') -> dict:
+    try:
+        with open(path, 'r') as f:
+            data = yaml.safe_load(f) or {}
+            return data
+    except FileNotFoundError:
+        logger.error(f"Config file '{path}' not found.")
+    except Exception as e:
+        logger.error(f"Failed to read YAML config '{path}': {e}")
+    return {}
+
+async def init_adapters_from_config(cfg: dict, debug: bool = False):
+    global ADAPTERS
+    ADAPTERS = []
+    adapters_cfg = (cfg or {}).get('adapters') or []
+    for entry in adapters_cfg:
+        if not isinstance(entry, dict):
+            continue
+        if not entry.get('enabled', True):
+            continue
+        adapter_type = (entry.get('type') or '').lower()
+        adapter = None
+        
+        # Add debug flag to adapter config
+        adapter_config = entry.copy()
+        adapter_config['debug'] = debug
+        
+        if adapter_type == 'stdout':
+            adapter = StdoutAdapter(adapter_config)
+        elif adapter_type == 'http':
+            adapter = HttpAdapter(adapter_config)
+        elif adapter_type == 'mongodb':
+            adapter = MongoDBAdapter(adapter_config)
+        else:
+            logger.warning(f"Unknown adapter type: {adapter_type}")
+            continue
+        try:
+            await adapter.init()
+        except Exception as e:
+            logger.error(f"Failed to init adapter {adapter_type}: {e}")
+            continue
+        ADAPTERS.append(adapter)
 
 def load_profiles():
     """Loads the filtering profiles from profiles.json."""
@@ -197,7 +489,7 @@ async def get_updates(client, chat, from_id, limit, args):
 
             cleaned_msg = cleanup_json(message_dict, args.profile)
             if cleaned_msg:
-                print(json.dumps(cleaned_msg, indent=2, ensure_ascii=False))
+                asyncio.create_task(emit_message_to_adapters(cleaned_msg, args.debug))
                 printed_any = True
 
         if not printed_any:
@@ -268,6 +560,84 @@ async def add_reaction(client, chat, message_id, reaction):
         logger.info(f"Successfully added reaction '{reaction}' to message {message_id}.")
     except Exception as e:
         logger.error(f"Failed to add reaction: {e}")
+
+async def forward_message(client, source_chat, message_id, target_chat):
+    """Forward a message from source_chat to target_chat. Returns the forwarded message."""
+    try:
+        logger.info(f"Forwarding message {message_id} from '{source_chat}' to '{target_chat}'.")
+        forwarded = await client.forward_messages(
+            entity=target_chat,
+            messages=message_id,
+            from_peer=source_chat
+        )
+        logger.info("Successfully forwarded message.")
+        return forwarded
+    except Exception as e:
+        logger.error(f"Failed to forward message: {e}")
+        return None
+
+async def _resolve_source_peer_via_message(client, chat_identifier, message_id):
+    msg = await client.get_messages(chat_identifier, ids=message_id)
+    if not msg:
+        logger.error("Could not fetch source message to resolve source peer.")
+        return None
+    try:
+        return await client.get_input_entity(msg.peer_id)
+    except Exception as e:
+        logger.error(f"Failed to resolve source peer from message: {e}")
+        return None
+
+async def _resolve_dest_peer(client, chat_identifier):
+    try:
+        return await client.get_input_entity(chat_identifier)
+    except Exception as e:
+        from telethon.tl.types import InputPeerChat
+        if isinstance(chat_identifier, int):
+            return InputPeerChat(chat_identifier)
+        logger.error(f"Failed to resolve destination chat: {e}")
+        return None
+
+async def send_cross_chat_reply(client, chat, text=None, files=None, reply_to=None, source_chat=None):
+    """Send a reply in another chat pointing to a message in source_chat.
+
+    Parameters mirror send_message order for consistency:
+    - chat: destination chat (target)
+    - text: text to send
+    - files: not supported for cross-chat replies
+    - reply_to: source message id (required)
+    - source_chat: source chat where reply_to message lives (required)
+    """
+    from telethon.tl.functions.messages import SendMessageRequest
+    from telethon.tl.types import InputReplyToMessage
+    if files:
+        logger.error("Cross-chat reply with files is not supported in this mode.")
+        return
+    if source_chat is None or reply_to is None:
+        logger.error("send_cross_chat_reply requires source_chat and reply_to (message id).")
+        return
+    # Resolve source peer deterministically via the message's peer id
+    source_peer = await _resolve_source_peer_via_message(client, source_chat, reply_to)
+    if not source_peer:
+        return
+
+    dest_peer = await _resolve_dest_peer(client, chat)
+    if not dest_peer:
+        return
+    reply_to_obj = InputReplyToMessage(reply_to_peer_id=source_peer, reply_to_msg_id=reply_to)
+    try:
+        await client(SendMessageRequest(peer=dest_peer, message=text or "", reply_to=reply_to_obj))
+        logger.info("Cross-chat reply sent successfully.")
+    except Exception as e:
+        logger.error(f"Failed to send cross-chat reply: {e}")
+
+async def edit_message(client, chat, message_id, new_text):
+    """Edit own message text or caption in a chat or channel."""
+    try:
+        logger.info(f"Editing message {message_id} in '{chat}'.")
+        await client.edit_message(chat, message_id, new_text)
+        logger.info(f"Successfully edited message {message_id}.")
+    except Exception as e:
+        logger.error(f"Failed to edit message: {e}")
 
 async def click_button(client, chat, message_id, button_text):
     logger.info(f"Attempting to click button '{button_text}' on message {message_id} in '{chat}'.")
@@ -372,25 +742,267 @@ async def search_messages(client, query, args):
         logger.error(f"An error occurred during search: {e}")
 
 
+# --- Entity Inspection ---
+async def get_entities(client, identifiers, args):
+	"""Fetch and print entities (users/chats/channels) and their full info."""
+	results = []
+	for ident in identifiers:
+		lookup = ident
+		# Try convert numeric IDs
+		try:
+			lookup = int(ident)
+		except Exception:
+			pass
+		try:
+			entity = await client.get_entity(lookup)
+			entity_json = json.loads(entity.to_json())
+			full = None
+			# Try to enrich with full info depending on type
+			etype = entity_json.get('_')
+			if etype == 'User':
+				try:
+					full = await client(GetFullUserRequest(entity))
+				except Exception:
+					full = None
+			elif etype == 'Channel':
+				try:
+					full = await client(GetFullChannelRequest(channel=entity))
+				except Exception:
+					full = None
+			elif etype == 'Chat':
+				try:
+					full = await client(GetFullChatRequest(chat_id=entity.id))
+				except Exception:
+					full = None
+
+			obj = {
+				'entity': entity_json,
+				'full': json.loads(full.to_json()) if full else None,
+				'input': ident
+			}
+			cleaned = cleanup_json(obj, args.profile)
+			results.append(cleaned)
+		except Exception as e:
+			results.append({'input': ident, 'error': str(e)})
+
+	print(json.dumps(results, indent=2, ensure_ascii=False))
+
 # --- Real-time Event Handling ---
 
-async def new_message_handler(event, args):
-    """Event handler for new messages."""
-    logger.info(f"New message received in chat {event.chat_id}")
-    message_json = json.loads(event.message.to_json())
-    
-    # Apply command-line filters
-    if not apply_message_filters(message_json, args):
-        return
+async def message_event_handler(event, args):
+    """Unified handler for new and edited messages."""
+    import time
+    start_time = time.time()
+    try:
+        kind = 'edited' if isinstance(event, events.MessageEdited.Event) else 'new'
+        if args.debug:
+            logger.info(f"[DEBUG] Message {kind} received in chat {event.chat_id}, message_id: {getattr(event.message, 'id', 'unknown')}")
+        else:
+            logger.info(f"Message {kind} in chat {event.chat_id}")
         
-    cleaned_msg = cleanup_json(message_json, args.profile)
-    if cleaned_msg:
-        # We add a separator to make it clear where one message ends and another begins
-        print(json.dumps(cleaned_msg, indent=2, ensure_ascii=False))
+        message_json = json.loads(event.message.to_json())
+        
+        if args.debug:
+            logger.info(f"[DEBUG] Message parsing completed in {(time.time() - start_time)*1000:.2f}ms")
+        
+        if not apply_message_filters(message_json, args):
+            if args.debug:
+                logger.info(f"[DEBUG] Message filtered out by message filters")
+            return
+        
+        cleaned_msg = cleanup_json(message_json, args.profile)
+        if cleaned_msg:
+            if args.debug:
+                logger.info(f"[DEBUG] Creating async task for adapters emission")
+            task = asyncio.create_task(emit_message_to_adapters(cleaned_msg, args.debug))
+            if args.debug:
+                # Add task monitoring
+                task.add_done_callback(lambda t: _log_task_completion(t, args.debug, start_time))
+        else:
+            if args.debug:
+                logger.info(f"[DEBUG] Message cleaned to empty, skipping adapters")
+    except Exception as e:
+        logger.error(f"Error in message_event_handler: {e}")
+        if args.debug:
+            import traceback
+            logger.error(f"[DEBUG] Full traceback: {traceback.format_exc()}")
+
+def _log_task_completion(task, debug_enabled, start_time):
+    """Callback to log task completion."""
+    if not debug_enabled:
+        return
+    import time
+    total_time = (time.time() - start_time) * 1000
+    if task.exception():
+        logger.error(f"[DEBUG] Adapter task failed after {total_time:.2f}ms: {task.exception()}")
+    else:
+        logger.info(f"[DEBUG] Adapter task completed successfully in {total_time:.2f}ms")
+
+async def _monitor_asyncio_tasks(client=None):
+    """Monitor asyncio tasks and event loop for potential deadlocks."""
+    import time
+    import gc
+    
+    logger.info("[DEBUG] Starting asyncio task monitor")
+    last_task_count = 0
+    last_check_time = time.time()
+    
+    while True:
+        try:
+            await asyncio.sleep(30)  # Check every 30 seconds
+            
+            current_time = time.time()
+            # Get all tasks
+            all_tasks = asyncio.all_tasks()
+            current_task_count = len(all_tasks)
+            
+            # Count tasks by state
+            pending_tasks = sum(1 for task in all_tasks if not task.done())
+            done_tasks = sum(1 for task in all_tasks if task.done())
+            
+            logger.info(f"[DEBUG] Task Monitor: {current_task_count} total tasks "
+                       f"({pending_tasks} pending, {done_tasks} done)")
+            
+            # Always show pending tasks details if there are any persistent ones
+            if pending_tasks > 0:
+                logger.info(f"[DEBUG] Analyzing {min(pending_tasks, 10)} pending tasks:")
+                pending_count = 0
+                for task in all_tasks:
+                    if task.done():
+                        continue
+                    pending_count += 1
+                    if pending_count > 10:  # Limit output
+                        break
+                    
+                    task_name = getattr(task, '_name', 'unnamed')
+                    task_coro = getattr(task, '_coro', None)
+                    
+                    # Get more detailed info about the coroutine
+                    if task_coro:
+                        coro_frame = getattr(task_coro, 'cr_frame', None)
+                        if coro_frame:
+                            filename = coro_frame.f_code.co_filename
+                            line_no = coro_frame.f_lineno
+                            func_name = coro_frame.f_code.co_name
+                            location = f"{filename.split('/')[-1]}:{line_no} in {func_name}()"
+                        else:
+                            location = "no frame info"
+                        coro_name = f"{task_coro.__qualname__} at {location}"
+                    else:
+                        coro_name = 'unknown coroutine'
+                    
+                    # Check if task is waiting on something
+                    task_state = "unknown"
+                    if hasattr(task, '_fut_waiter'):
+                        waiter = getattr(task, '_fut_waiter', None)
+                        if waiter:
+                            task_state = f"waiting on {type(waiter).__name__}"
+                    
+                    logger.info(f"[DEBUG] Task {pending_count}: {task_name}")
+                    logger.info(f"[DEBUG]   Coro: {coro_name}")
+                    logger.info(f"[DEBUG]   State: {task_state}")
+            
+            # Check for task accumulation (potential memory leak or hanging tasks)
+            if current_task_count > last_task_count + 10:
+                logger.warning(f"[DEBUG] Task count increased significantly: "
+                              f"{last_task_count} -> {current_task_count}")
+            
+            # Check event loop lag
+            loop_start = time.time()
+            await asyncio.sleep(0)  # Yield control to see how long it takes
+            loop_lag = (time.time() - loop_start) * 1000
+            
+            if loop_lag > 100:  # More than 100ms lag
+                logger.warning(f"[DEBUG] Event loop lag detected: {loop_lag:.2f}ms")
+            
+            # Check if we have persistent pending tasks (potential deadlock)
+            if pending_tasks > 5 and pending_tasks == last_task_count:
+                logger.warning(f"[DEBUG] Same number of pending tasks ({pending_tasks}) for 30+ seconds - possible deadlock!")
+                
+                # Check Telethon client status if available
+                if client:
+                    try:
+                        is_connected = client.is_connected()
+                        logger.info(f"[DEBUG] Telethon client connected: {is_connected}")
+                        if is_connected:
+                            # Try to make a simple API call to test connectivity
+                            try:
+                                me = await asyncio.wait_for(client.get_me(), timeout=5.0)
+                                logger.info(f"[DEBUG] Telethon connectivity test passed: user {me.id}")
+                            except asyncio.TimeoutError:
+                                logger.error(f"[DEBUG] Telethon connectivity test timed out - possible network issue")
+                            except Exception as api_e:
+                                logger.error(f"[DEBUG] Telethon connectivity test failed: {api_e}")
+                        else:
+                            logger.error(f"[DEBUG] Telethon client is disconnected!")
+                    except Exception as e:
+                        logger.error(f"[DEBUG] Error checking Telethon client: {e}")
+                
+                # Try to get more info about what's blocking
+                try:
+                    import inspect
+                    frame = inspect.currentframe()
+                    logger.info(f"[DEBUG] Current frame: {frame.f_code.co_filename}:{frame.f_lineno}")
+                except:
+                    pass
+            
+            last_task_count = current_task_count
+            last_check_time = current_time
+            
+        except asyncio.CancelledError:
+            logger.info("[DEBUG] Task monitor cancelled")
+            break
+        except Exception as e:
+            logger.error(f"[DEBUG] Error in task monitor: {e}")
+            # Continue monitoring despite errors
+
+async def callback_query_handler(event, args):
+    """Event handler for inline keyboard button presses (callback queries)."""
+    try:
+        logger.info(f"Callback query in chat {event.chat_id} from user {getattr(event.sender_id, 'value', event.sender_id)}")
+        # Try to fetch the related message to apply filters and include in payload
+        msg = None
+        try:
+            await event.answer(cache_time=0)
+            msg = await event.get_message()
+        except Exception:
+            msg = None
+
+        if msg:
+            message_json = json.loads(msg.to_json())
+            cleaned_message = cleanup_json(message_json, args.profile)
+        else:
+            cleaned_message = None
+
+        # Primary output: structured JSON akin to message output
+        payload = {
+            'type': 'callback_query',
+            'id': getattr(event, 'id', None),
+            'chat_id': getattr(event, 'chat_id', None),
+            'message_id': getattr(event, 'message_id', None),
+            'sender_id': getattr(event, 'sender_id', None),
+            'chat_instance': getattr(event, 'chat_instance', None),
+            'data': None
+        }
+
+        try:
+            payload['data'] = event.data.decode('utf-8') if event.data else None
+        except Exception:
+            payload['data'] = str(getattr(event, 'data', None))
+
+        if cleaned_message:
+            payload['message'] = cleaned_message
+
+        cleaned_payload = cleanup_json(payload, args.profile)
+        if cleaned_payload:
+            asyncio.create_task(emit_message_to_adapters(cleaned_payload, args.debug))
+
+    except Exception as e:
+        logger.error(f"Error in callback_query_handler: {e}")
 
 async def main():
     """Main function to connect and interact with Telegram."""
-    parser = argparse.ArgumentParser(description="Telegram User Client CLI")
+    parser = argparse.ArgumentParser(description="Telegram User/Bot Client CLI")
     # Add a mutually exclusive group to ensure --listen is used alone
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--listen', type=str, help='Listen for real-time messages from a specific chat ID or username.')
@@ -405,15 +1017,21 @@ async def main():
     parser.add_argument('--inclusive', action='store_true', help='Include boundary messages specified by --fromId/--toId in the range.')
     parser.add_argument('--limit', type=int, help='Fetch a specific number of items (e.g., messages or chats).')
     parser.add_argument('--profile', type=str, default='default', help='Name of the filtering profile to apply to the output.')
+    parser.add_argument('--botToken', type=str, help='Bot token to run in bot mode (enables CallbackQuery handling).')
+    parser.add_argument('--session', type=str, help='Optional custom session name/file to avoid sqlite locks when running multiple instances.')
     parser.add_argument('--forward', action='store_true', help='When used with --fromId, read newer messages (IDs greater than fromId).')
     parser.add_argument('--backward', action='store_true', help='When used with --fromId, read older messages (IDs less than fromId).')
-    parser.add_argument('--sendMessage', type=str, help='Text of message to send.')
+    parser.add_argument('--sendMessage', type=str, help='Text of message to send (non-reply flow).')
     parser.add_argument('--sendFiles', nargs='+', help='Files to send (photos, videos, documents). Can specify multiple files.')
     parser.add_argument('--replyTo', type=int, help='Message ID to reply to.')
+    parser.add_argument('--targetChat', type=str, help='Target chat for sending. With --replyTo, replies in target chat to message from --chat.')
     parser.add_argument('--clickButton', type=str, help='Text of button to click.')
-    parser.add_argument('--messageId', type=int, help='Message ID for button click or download.')
+    parser.add_argument('--messageId', type=int, help='Message ID for button click, download, forward, or reply.')
+    parser.add_argument('--forwardMessage', action='store_true', help='Forward message: requires --chat, --messageId and --targetChat.')
+    parser.add_argument('--replyMessage', type=str, help='Reply to --replyTo message ID. Requires text. With --targetChat replies there; else replies in --chat.')
     parser.add_argument('--download', action='store_true', help='Download file from message.')
     parser.add_argument('--addReaction', type=str, help='Add reaction (emoji) to a message specified by --messageId.')
+    parser.add_argument('--editMessage', type=str, help='New text to replace the message text/caption for --messageId.')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging.')
     
     # Message filtering options
@@ -425,6 +1043,7 @@ async def main():
     parser.add_argument('--forwarded-only', action='store_true', help='Filter only forwarded messages.')
     parser.add_argument('--replies-only', action='store_true', help='Filter only reply messages.')
     parser.add_argument('--has-reactions', action='store_true', help='Filter messages with reactions only.')
+    parser.add_argument('--get-entities', nargs='+', help='Fetch full info for users/chats/channels by ID or @username.')
     args = parser.parse_args()
 
     # If no arguments are provided, print help and exit.
@@ -447,28 +1066,27 @@ async def main():
 
     load_profiles() # Load the profiles at the start
 
-    config = configparser.ConfigParser()
-    config.read('config.ini')
-    
-    phone_number = config.get('telegram', 'phone_number', fallback=None)
-    api_id_str = config.get('telegram', 'api_id', fallback=None)
-    api_hash = config.get('telegram', 'api_hash', fallback=None)
+    yaml_cfg = load_yaml_config('config.yaml')
+    telegram_cfg = (yaml_cfg or {}).get('telegram') or {}
+    api_id_str = str(telegram_cfg.get('api_id')) if telegram_cfg.get('api_id') is not None else None
+    api_hash = telegram_cfg.get('api_hash')
+    phone_number = telegram_cfg.get('phone_number')
+    if phone_number is not None:
+        phone_number = str(phone_number)
 
-    if not phone_number or phone_number == 'YOUR_PHONE_NUMBER_HERE':
-        logger.error("Phone number not set in config.ini")
-        return
-    
     if not api_id_str or api_id_str == 'YOUR_API_ID_HERE' or not api_hash or api_hash == 'YOUR_API_HASH_HERE':
-        logger.error("API ID or API Hash not set in config.ini")
+        logger.error("API ID or API Hash not set in config.yaml")
         return
         
     try:
         api_id = int(api_id_str)
     except ValueError:
-        logger.error("Invalid api_id in config.ini. It must be an integer.")
+        logger.error("Invalid api_id in config.yaml. It must be an integer.")
         return
 
-    client = TelegramClient(SESSION_NAME, api_id, api_hash)
+    # Use separate session files for user and bot, allow override via --session
+    session_name = args.session or (SESSION_NAME_BOT if args.botToken else SESSION_NAME)
+    client = TelegramClient(session_name, api_id, api_hash)
     
     # Convert chat to int if it's a numeric ID, especially for negative ones
     chat_entity = args.chat
@@ -477,19 +1095,46 @@ async def main():
             chat_entity = int(chat_entity)
         except ValueError:
             pass  # It's a username, leave it as a string
+    # Convert targetChat similarly
+    target_chat_entity = args.targetChat
+    if target_chat_entity:
+        try:
+            target_chat_entity = int(target_chat_entity)
+        except ValueError:
+            pass
 
     try:
-        await client.connect()
-        if not await client.is_user_authorized():
-            logger.warning("User not authorized. Sending code request.")
-            await client.send_code_request(phone_number)
-            try:
-                await client.sign_in(phone_number, getpass('Enter the code: '))
-            except SessionPasswordNeededError:
-                await client.sign_in(password=getpass('Enter your 2FA password: '))
-            except Exception as e:
-                logger.error(f"Failed to sign in: {e}")
+        if args.botToken:
+            # Bot mode: start handles connect+login
+            await client.start(bot_token=args.botToken)
+        else:
+            # User mode: prefer start (connect+login+2FA)
+            if not phone_number or phone_number == 'YOUR_PHONE_NUMBER_HERE':
+                logger.error("Phone number not set in config.yaml")
                 return
+            try:
+                await client.start(
+                    phone=lambda: phone_number,
+                    code_callback=lambda: getpass('Enter the code: '),
+                    password=lambda: getpass('Enter your 2FA password: ')
+                )
+            except Exception as e:
+                logger.error(f"Failed to start user session: {e}")
+                return
+
+        # Default action for pure bot mode: start listening to all updates
+        if args.botToken and not any([
+            args.listen, args.listen_private, args.listen_all,
+            args.list_chats, args.search, args.sendMessage, args.sendFiles,
+            args.clickButton, args.download, args.addReaction, args.chat, args.editMessage,
+            args.forwardMessage, args.replyMessage,
+            args.get_entities
+        ]):
+            logger.info("--botToken provided without an explicit action; defaulting to --listen-all.")
+            args.listen_all = True
+
+        # Initialize adapters once connected
+        await init_adapters_from_config(yaml_cfg, args.debug)
 
         if args.listen:
             listen_chat_entity = args.listen
@@ -499,36 +1144,160 @@ async def main():
                 pass # It's a username
             
             logger.info(f"Listening for new messages in '{listen_chat_entity}'... Press Ctrl+C to stop.")
-            # Register the handler
-            client.add_event_handler(lambda event: new_message_handler(event, args), events.NewMessage(chats=listen_chat_entity))
-            # Run until disconnected
-            await client.run_until_disconnected()
+            
+            # Start monitoring task if debug is enabled
+            monitor_task = None
+            if args.debug:
+                monitor_task = asyncio.create_task(_monitor_asyncio_tasks(client))
+            
+            # Register handlers
+            if args.debug:
+                # Wrap handlers with debug logging
+                def debug_new_message_handler(event):
+                    logger.info(f"[DEBUG] Telethon NewMessage event triggered for chat {getattr(event, 'chat_id', 'unknown')}")
+                    return message_event_handler(event, args)
+                
+                def debug_edited_message_handler(event):
+                    logger.info(f"[DEBUG] Telethon MessageEdited event triggered for chat {getattr(event, 'chat_id', 'unknown')}")
+                    return message_event_handler(event, args)
+                
+                client.add_event_handler(debug_new_message_handler, events.NewMessage(chats=listen_chat_entity))
+                client.add_event_handler(debug_edited_message_handler, events.MessageEdited(chats=listen_chat_entity))
+                
+                if args.botToken:
+                    def debug_callback_handler(event):
+                        logger.info(f"[DEBUG] Telethon CallbackQuery event triggered for chat {getattr(event, 'chat_id', 'unknown')}")
+                        return callback_query_handler(event, args)
+                    client.add_event_handler(debug_callback_handler, CallbackQuery(chats=listen_chat_entity))
+            else:
+                client.add_event_handler(lambda event: message_event_handler(event, args), events.NewMessage(chats=listen_chat_entity))
+                client.add_event_handler(lambda event: message_event_handler(event, args), events.MessageEdited(chats=listen_chat_entity))
+                if args.botToken:
+                    client.add_event_handler(lambda event: callback_query_handler(event, args), CallbackQuery(chats=listen_chat_entity))
+            
+            try:
+                # Run until disconnected
+                await client.run_until_disconnected()
+            finally:
+                if monitor_task:
+                    monitor_task.cancel()
+                    try:
+                        await monitor_task
+                    except asyncio.CancelledError:
+                        pass
         
         elif args.listen_private:
             logger.info("Listening for all incoming private messages... Press Ctrl+C to stop.")
+            
+            # Start monitoring task if debug is enabled
+            monitor_task = None
+            if args.debug:
+                monitor_task = asyncio.create_task(_monitor_asyncio_tasks(client))
+            
             # Register the handler with a filter for incoming private messages
             client.add_event_handler(
-                lambda event: new_message_handler(event, args),
+                lambda event: message_event_handler(event, args),
                 events.NewMessage(incoming=True, func=lambda e: e.is_private)
             )
-            await client.run_until_disconnected()
+            client.add_event_handler(
+                lambda event: message_event_handler(event, args),
+                events.MessageEdited(func=lambda e: e.is_private)
+            )
+            if args.botToken:
+                client.add_event_handler(
+                    lambda event: callback_query_handler(event, args),
+                    CallbackQuery(func=lambda e: e.is_private)
+                )
+            
+            try:
+                await client.run_until_disconnected()
+            finally:
+                if monitor_task:
+                    monitor_task.cancel()
+                    try:
+                        await monitor_task
+                    except asyncio.CancelledError:
+                        pass
 
         elif args.listen_all:
             logger.info("Listening for all incoming messages from every chat... Press Ctrl+C to stop.")
+            
+            # Start monitoring task if debug is enabled
+            monitor_task = None
+            if args.debug:
+                monitor_task = asyncio.create_task(_monitor_asyncio_tasks(client))
+            
             # Register a handler for all messages without any filters
-            client.add_event_handler(
-                lambda event: new_message_handler(event, args),
-                events.NewMessage()
-            )
-            await client.run_until_disconnected()
+            if args.debug:
+                # Wrap handlers with debug logging for listen_all
+                def debug_new_message_handler_all(event):
+                    logger.info(f"[DEBUG] Telethon NewMessage event (listen_all) triggered for chat {getattr(event, 'chat_id', 'unknown')}")
+                    return message_event_handler(event, args)
+                
+                def debug_edited_message_handler_all(event):
+                    logger.info(f"[DEBUG] Telethon MessageEdited event (listen_all) triggered for chat {getattr(event, 'chat_id', 'unknown')}")
+                    return message_event_handler(event, args)
+                
+                client.add_event_handler(debug_new_message_handler_all, events.NewMessage())
+                client.add_event_handler(debug_edited_message_handler_all, events.MessageEdited())
+                
+                if args.botToken:
+                    def debug_callback_handler_all(event):
+                        logger.info(f"[DEBUG] Telethon CallbackQuery event (listen_all) triggered for chat {getattr(event, 'chat_id', 'unknown')}")
+                        return callback_query_handler(event, args)
+                    client.add_event_handler(debug_callback_handler_all, CallbackQuery())
+            else:
+                client.add_event_handler(
+                    lambda event: message_event_handler(event, args),
+                    events.NewMessage()
+                )
+                client.add_event_handler(
+                    lambda event: message_event_handler(event, args),
+                    events.MessageEdited()
+                )
+                if args.botToken:
+                    client.add_event_handler(
+                        lambda event: callback_query_handler(event, args),
+                        CallbackQuery()
+                    )
+            
+            try:
+                await client.run_until_disconnected()
+            finally:
+                if monitor_task:
+                    monitor_task.cancel()
+                    try:
+                        await monitor_task
+                    except asyncio.CancelledError:
+                        pass
 
         elif args.list_chats:
             await list_chats(client, args)
         elif args.search:
             await search_messages(client, args.search, args)
+        elif args.get_entities:
+            await get_entities(client, args.get_entities, args)
+        elif args.forwardMessage:
+            # Forward only
+            if not (chat_entity and target_chat_entity and args.messageId):
+                logger.error("--forwardMessage requires --chat, --messageId and --targetChat.")
+                return
+            await forward_message(client, chat_entity, args.messageId, target_chat_entity)
+        elif args.replyMessage:
+            if not (chat_entity and args.messageId):
+                logger.error("--replyMessage requires --chat and --messageId.")
+                return
+            if target_chat_entity:
+                if args.sendFiles:
+                    logger.error("--replyMessage with --targetChat does not support files.")
+                    return
+                await send_cross_chat_reply(client, target_chat_entity, args.replyMessage, None, args.messageId, chat_entity)
+            else:
+                await send_message(client, chat_entity, args.replyMessage, args.sendFiles, args.messageId)
         elif args.sendMessage or args.sendFiles:
+            # Plain send within chat (no targetChat allowed here)
             if not chat_entity:
-                logger.error("--chat is required for sending messages or files.")
+                logger.error("--chat is required for --sendMessage/--sendFiles.")
                 return
             await send_message(client, chat_entity, args.sendMessage, args.sendFiles, args.replyTo)
         elif args.clickButton:
@@ -546,6 +1315,11 @@ async def main():
                 logger.error("--chat and --messageId are required for --addReaction.")
                 return
             await add_reaction(client, chat_entity, args.messageId, args.addReaction)
+        elif args.editMessage:
+            if not chat_entity or not args.messageId:
+                logger.error("--chat and --messageId are required for --editMessage.")
+                return
+            await edit_message(client, chat_entity, args.messageId, args.editMessage)
         else:
             if not chat_entity:
                 # If no other action is specified, default to get_updates, which requires a chat
@@ -557,6 +1331,10 @@ async def main():
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
     finally:
+        try:
+            await close_adapters()
+        except Exception as e:
+            logger.error(f"Failed to close adapters: {e}")
         if client.is_connected():
             await client.disconnect()
             logger.info("Client disconnected.")
