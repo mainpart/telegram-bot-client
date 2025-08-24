@@ -1,6 +1,6 @@
 # Secrets and local state
-config.ini
-anon.session
+config.yaml
+*.session
 public.keys
 .venv/
 __pycache__/

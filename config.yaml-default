@@ -1,0 +1,24 @@
+telegram:
+  phone_number: YOUR_PHONE_NUMBER_HERE
+  api_id: YOUR_API_ID_HERE
+  api_hash: YOUR_API_HASH_HERE
+
+# Адаптеры вывода сообщений
+# Доступные типы: stdout, http, mongodb
+adapters:
+  - type: stdout
+    enabled: true
+    pretty: true
+  # - type: http
+  #   enabled: true
+  #   url: "https://example.com/webhook"
+  #   method: POST
+  #   headers:
+  #     Authorization: "Bearer token"
+  #   timeout: 10
+  # - type: mongodb
+  #   enabled: true
+  #   uri: "mongodb://user:pass@mongo:27017"
+  #   database: "telegram"
+  #   collection: "messages"
+
