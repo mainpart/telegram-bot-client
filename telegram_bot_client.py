@@ -62,28 +62,11 @@ class HttpAdapter(BaseAdapter):
         self.method = (config.get('method') or 'POST').upper()
         self.headers = config.get('headers') or {}
         self.timeout_seconds = int(config.get('timeout', 10))
-        self.debug = config.get('debug', False)
         self._session: Optional[aiohttp.ClientSession] = None
 
     async def init(self):
         timeout = aiohttp.ClientTimeout(total=self.timeout_seconds)
-        
-        # Configure connector with connection debug info
-        connector = None
-        if self.debug:
-            # Enable connection keep-alive and debug logging
-            connector = aiohttp.TCPConnector(
-                enable_cleanup_closed=True,
-                limit=100,
-                limit_per_host=30
-            )
-            if self.debug:
-                logger.info("HttpAdapter: Initializing session with debug connector")
-        
-        self._session = aiohttp.ClientSession(
-            timeout=timeout,
-            connector=connector
-        )
+        self._session = aiohttp.ClientSession(timeout=timeout)
 
     async def exec(self, message: dict):
         if not self.url:
@@ -92,95 +75,20 @@ class HttpAdapter(BaseAdapter):
         if not self._session:
             await self.init()
         try:
-            if self.debug:
-                logger.info(f"HttpAdapter: Sending {self.method} request to {self.url}")
-                logger.info(f"HttpAdapter: Headers: {self.headers}")
-                logger.info(f"HttpAdapter: Message payload size: {len(json.dumps(message))} bytes")
-            
             async with self._session.request(self.method, self.url, json=message, headers=self.headers) as resp:
-                # Check connection info
-                if self.debug and hasattr(resp, 'connection'):
-                    connection_info = resp.connection
-                    if connection_info:
-                        logger.info(f"HttpAdapter: Connection established to {connection_info.host}:{connection_info.port}")
-                        logger.info(f"HttpAdapter: Connection is_ssl: {getattr(connection_info, 'is_ssl', 'unknown')}")
-                
                 # Optionally read response to release connection properly
-                response_text = await resp.text()
-                
-                if self.debug:
-                    logger.info(f"HttpAdapter: Response status: {resp.status}")
-                    logger.info(f"HttpAdapter: Response headers: {dict(resp.headers)}")
-                    
-                    # Check connection close headers
-                    connection_header = resp.headers.get('Connection', '').lower()
-                    if connection_header == 'close':
-                        logger.info("HttpAdapter: Server indicated connection will be closed (Connection: close)")
-                    elif connection_header == 'keep-alive':
-                        logger.info("HttpAdapter: Server indicated connection will be kept alive (Connection: keep-alive)")
-                    
-                    # Check if server supports keep-alive
-                    if 'keep-alive' in resp.headers:
-                        logger.info(f"HttpAdapter: Keep-Alive parameters: {resp.headers['keep-alive']}")
-                    
-                    logger.info(f"HttpAdapter: Response body: {response_text[:500]}{'...' if len(response_text) > 500 else ''}")
-                
+                await resp.read()
                 if resp.status >= 400:
                     logger.error(f"HttpAdapter failed with status {resp.status}")
-                    if self.debug:
-                        logger.error(f"HttpAdapter: Full response body: {response_text}")
-                
-                # Log when connection is returned to pool or closed
-                if self.debug:
-                    logger.info("HttpAdapter: Response consumed, connection handling by aiohttp")
-        except asyncio.TimeoutError as e:
-            logger.error(f"HttpAdapter timeout error: {e}")
-            if self.debug:
-                logger.error("HttpAdapter: Connection timed out - likely closed by client due to timeout")
-        except aiohttp.ClientConnectionError as e:
-            logger.error(f"HttpAdapter connection error: {e}")
-            if self.debug:
-                logger.error("HttpAdapter: Connection error - server may have closed the connection")
-        except aiohttp.ServerDisconnectedError as e:
-            logger.error(f"HttpAdapter server disconnected: {e}")
-            if self.debug:
-                logger.error("HttpAdapter: Server disconnected the connection unexpectedly")
-        except aiohttp.ClientConnectorError as e:
-            logger.error(f"HttpAdapter connector error: {e}")
-            if self.debug:
-                logger.error("HttpAdapter: Failed to establish connection - connection refused by server")
         except Exception as e:
             logger.error(f"HttpAdapter error: {e}")
-            if self.debug:
-                import traceback
-                logger.error(f"HttpAdapter: Full traceback: {traceback.format_exc()}")
-                # Try to determine if it's a connection-related error
-                error_str = str(e).lower()
-                if any(keyword in error_str for keyword in ['connection', 'closed', 'reset', 'refused']):
-                    logger.error("HttpAdapter: Error appears to be connection-related")
 
     async def close(self):
         if self._session:
             try:
-                if self.debug:
-                    # Get connector statistics before closing
-                    connector = self._session.connector
-                    if connector and hasattr(connector, '_conns'):
-                        active_connections = sum(len(conns) for conns in connector._conns.values())
-                        logger.info(f"HttpAdapter: Closing session with {active_connections} active connections")
-                    else:
-                        logger.info("HttpAdapter: Closing session (connection count unavailable)")
-                
                 await self._session.close()
-                
-                if self.debug:
-                    logger.info("HttpAdapter: Session closed by client")
-                    
             except Exception as e:
                 logger.error(f"HttpAdapter close error: {e}")
-                if self.debug:
-                    import traceback
-                    logger.error(f"HttpAdapter close traceback: {traceback.format_exc()}")
             finally:
                 self._session = None
 
@@ -217,53 +125,18 @@ class MongoDBAdapter(BaseAdapter):
         except Exception as e:
             logger.error(f"MongoDBAdapter close error: {e}")
 
-async def _safe_adapter_exec(adapter: BaseAdapter, message: dict, debug: bool = False):
-    import time
-    start_time = time.time()
-    adapter_name = adapter.__class__.__name__
-    
+async def _safe_adapter_exec(adapter: BaseAdapter, message: dict):
     try:
-        if debug:
-            logger.info(f"[DEBUG] Starting {adapter_name} execution")
-        
         await adapter.exec(message)
-        
-        if debug:
-            execution_time = (time.time() - start_time) * 1000
-            logger.info(f"[DEBUG] {adapter_name} completed in {execution_time:.2f}ms")
-            
     except Exception as e:
-        execution_time = (time.time() - start_time) * 1000
-        logger.error(f"Adapter {adapter_name} failed after {execution_time:.2f}ms: {e}")
-        if debug:
-            import traceback
-            logger.error(f"[DEBUG] {adapter_name} full traceback: {traceback.format_exc()}")
+        logger.error(f"Adapter {adapter.__class__.__name__} failed: {e}")
 
-async def emit_message_to_adapters(message: dict, debug: bool = False):
-    import time
-    start_time = time.time()
-    
-    if debug:
-        logger.info(f"[DEBUG] emit_message_to_adapters called with {len(ADAPTERS)} adapters")
-    
+async def emit_message_to_adapters(message: dict):
     if not ADAPTERS:
         # Fallback to console if no adapters are configured
-        if debug:
-            logger.info(f"[DEBUG] No adapters configured, falling back to console output")
         print(json.dumps(message, indent=2, ensure_ascii=False))
         return
-    
-    if debug:
-        logger.info(f"[DEBUG] Starting parallel execution of {len(ADAPTERS)} adapters")
-    
-    # Execute all adapters in parallel
-    tasks = [_safe_adapter_exec(a, message, debug) for a in ADAPTERS]
-    results = await asyncio.gather(*tasks, return_exceptions=True)
-    
-    if debug:
-        total_time = (time.time() - start_time) * 1000
-        failed_count = sum(1 for r in results if isinstance(r, Exception))
-        logger.info(f"[DEBUG] All adapters completed in {total_time:.2f}ms, {failed_count} failed")
+    await asyncio.gather(*[_safe_adapter_exec(a, message) for a in ADAPTERS], return_exceptions=True)
 
 async def close_adapters():
     tasks = []
@@ -285,7 +158,7 @@ def load_yaml_config(path: str = 'config.yaml') -> dict:
         logger.error(f"Failed to read YAML config '{path}': {e}")
     return {}
 
-async def init_adapters_from_config(cfg: dict, debug: bool = False):
+async def init_adapters_from_config(cfg: dict):
     global ADAPTERS
     ADAPTERS = []
     adapters_cfg = (cfg or {}).get('adapters') or []
@@ -296,17 +169,12 @@ async def init_adapters_from_config(cfg: dict, debug: bool = False):
             continue
         adapter_type = (entry.get('type') or '').lower()
         adapter = None
-        
-        # Add debug flag to adapter config
-        adapter_config = entry.copy()
-        adapter_config['debug'] = debug
-        
         if adapter_type == 'stdout':
-            adapter = StdoutAdapter(adapter_config)
+            adapter = StdoutAdapter(entry)
         elif adapter_type == 'http':
-            adapter = HttpAdapter(adapter_config)
+            adapter = HttpAdapter(entry)
         elif adapter_type == 'mongodb':
-            adapter = MongoDBAdapter(adapter_config)
+            adapter = MongoDBAdapter(entry)
         else:
             logger.warning(f"Unknown adapter type: {adapter_type}")
             continue
@@ -489,7 +357,7 @@ async def get_updates(client, chat, from_id, limit, args):
 
             cleaned_msg = cleanup_json(message_dict, args.profile)
             if cleaned_msg:
-                asyncio.create_task(emit_message_to_adapters(cleaned_msg, args.debug))
+                asyncio.create_task(emit_message_to_adapters(cleaned_msg))
                 printed_any = True
 
         if not printed_any:
@@ -791,170 +659,17 @@ async def get_entities(client, identifiers, args):
 
 async def message_event_handler(event, args):
     """Unified handler for new and edited messages."""
-    import time
-    start_time = time.time()
     try:
         kind = 'edited' if isinstance(event, events.MessageEdited.Event) else 'new'
-        if args.debug:
-            logger.info(f"[DEBUG] Message {kind} received in chat {event.chat_id}, message_id: {getattr(event.message, 'id', 'unknown')}")
-        else:
-            logger.info(f"Message {kind} in chat {event.chat_id}")
-        
+        logger.info(f"Message {kind} in chat {event.chat_id}")
         message_json = json.loads(event.message.to_json())
-        
-        if args.debug:
-            logger.info(f"[DEBUG] Message parsing completed in {(time.time() - start_time)*1000:.2f}ms")
-        
         if not apply_message_filters(message_json, args):
-            if args.debug:
-                logger.info(f"[DEBUG] Message filtered out by message filters")
             return
-        
         cleaned_msg = cleanup_json(message_json, args.profile)
         if cleaned_msg:
-            if args.debug:
-                logger.info(f"[DEBUG] Creating async task for adapters emission")
-            task = asyncio.create_task(emit_message_to_adapters(cleaned_msg, args.debug))
-            if args.debug:
-                # Add task monitoring
-                task.add_done_callback(lambda t: _log_task_completion(t, args.debug, start_time))
-        else:
-            if args.debug:
-                logger.info(f"[DEBUG] Message cleaned to empty, skipping adapters")
+            asyncio.create_task(emit_message_to_adapters(cleaned_msg))
     except Exception as e:
         logger.error(f"Error in message_event_handler: {e}")
-        if args.debug:
-            import traceback
-            logger.error(f"[DEBUG] Full traceback: {traceback.format_exc()}")
-
-def _log_task_completion(task, debug_enabled, start_time):
-    """Callback to log task completion."""
-    if not debug_enabled:
-        return
-    import time
-    total_time = (time.time() - start_time) * 1000
-    if task.exception():
-        logger.error(f"[DEBUG] Adapter task failed after {total_time:.2f}ms: {task.exception()}")
-    else:
-        logger.info(f"[DEBUG] Adapter task completed successfully in {total_time:.2f}ms")
-
-async def _monitor_asyncio_tasks(client=None):
-    """Monitor asyncio tasks and event loop for potential deadlocks."""
-    import time
-    import gc
-    
-    logger.info("[DEBUG] Starting asyncio task monitor")
-    last_task_count = 0
-    last_check_time = time.time()
-    
-    while True:
-        try:
-            await asyncio.sleep(30)  # Check every 30 seconds
-            
-            current_time = time.time()
-            # Get all tasks
-            all_tasks = asyncio.all_tasks()
-            current_task_count = len(all_tasks)
-            
-            # Count tasks by state
-            pending_tasks = sum(1 for task in all_tasks if not task.done())
-            done_tasks = sum(1 for task in all_tasks if task.done())
-            
-            logger.info(f"[DEBUG] Task Monitor: {current_task_count} total tasks "
-                       f"({pending_tasks} pending, {done_tasks} done)")
-            
-            # Always show pending tasks details if there are any persistent ones
-            if pending_tasks > 0:
-                logger.info(f"[DEBUG] Analyzing {min(pending_tasks, 10)} pending tasks:")
-                pending_count = 0
-                for task in all_tasks:
-                    if task.done():
-                        continue
-                    pending_count += 1
-                    if pending_count > 10:  # Limit output
-                        break
-                    
-                    task_name = getattr(task, '_name', 'unnamed')
-                    task_coro = getattr(task, '_coro', None)
-                    
-                    # Get more detailed info about the coroutine
-                    if task_coro:
-                        coro_frame = getattr(task_coro, 'cr_frame', None)
-                        if coro_frame:
-                            filename = coro_frame.f_code.co_filename
-                            line_no = coro_frame.f_lineno
-                            func_name = coro_frame.f_code.co_name
-                            location = f"{filename.split('/')[-1]}:{line_no} in {func_name}()"
-                        else:
-                            location = "no frame info"
-                        coro_name = f"{task_coro.__qualname__} at {location}"
-                    else:
-                        coro_name = 'unknown coroutine'
-                    
-                    # Check if task is waiting on something
-                    task_state = "unknown"
-                    if hasattr(task, '_fut_waiter'):
-                        waiter = getattr(task, '_fut_waiter', None)
-                        if waiter:
-                            task_state = f"waiting on {type(waiter).__name__}"
-                    
-                    logger.info(f"[DEBUG] Task {pending_count}: {task_name}")
-                    logger.info(f"[DEBUG]   Coro: {coro_name}")
-                    logger.info(f"[DEBUG]   State: {task_state}")
-            
-            # Check for task accumulation (potential memory leak or hanging tasks)
-            if current_task_count > last_task_count + 10:
-                logger.warning(f"[DEBUG] Task count increased significantly: "
-                              f"{last_task_count} -> {current_task_count}")
-            
-            # Check event loop lag
-            loop_start = time.time()
-            await asyncio.sleep(0)  # Yield control to see how long it takes
-            loop_lag = (time.time() - loop_start) * 1000
-            
-            if loop_lag > 100:  # More than 100ms lag
-                logger.warning(f"[DEBUG] Event loop lag detected: {loop_lag:.2f}ms")
-            
-            # Check if we have persistent pending tasks (potential deadlock)
-            if pending_tasks > 5 and pending_tasks == last_task_count:
-                logger.warning(f"[DEBUG] Same number of pending tasks ({pending_tasks}) for 30+ seconds - possible deadlock!")
-                
-                # Check Telethon client status if available
-                if client:
-                    try:
-                        is_connected = client.is_connected()
-                        logger.info(f"[DEBUG] Telethon client connected: {is_connected}")
-                        if is_connected:
-                            # Try to make a simple API call to test connectivity
-                            try:
-                                me = await asyncio.wait_for(client.get_me(), timeout=5.0)
-                                logger.info(f"[DEBUG] Telethon connectivity test passed: user {me.id}")
-                            except asyncio.TimeoutError:
-                                logger.error(f"[DEBUG] Telethon connectivity test timed out - possible network issue")
-                            except Exception as api_e:
-                                logger.error(f"[DEBUG] Telethon connectivity test failed: {api_e}")
-                        else:
-                            logger.error(f"[DEBUG] Telethon client is disconnected!")
-                    except Exception as e:
-                        logger.error(f"[DEBUG] Error checking Telethon client: {e}")
-                
-                # Try to get more info about what's blocking
-                try:
-                    import inspect
-                    frame = inspect.currentframe()
-                    logger.info(f"[DEBUG] Current frame: {frame.f_code.co_filename}:{frame.f_lineno}")
-                except:
-                    pass
-            
-            last_task_count = current_task_count
-            last_check_time = current_time
-            
-        except asyncio.CancelledError:
-            logger.info("[DEBUG] Task monitor cancelled")
-            break
-        except Exception as e:
-            logger.error(f"[DEBUG] Error in task monitor: {e}")
-            # Continue monitoring despite errors
 
 async def callback_query_handler(event, args):
     """Event handler for inline keyboard button presses (callback queries)."""
@@ -995,7 +710,7 @@ async def callback_query_handler(event, args):
 
         cleaned_payload = cleanup_json(payload, args.profile)
         if cleaned_payload:
-            asyncio.create_task(emit_message_to_adapters(cleaned_payload, args.debug))
+            asyncio.create_task(emit_message_to_adapters(cleaned_payload))
 
     except Exception as e:
         logger.error(f"Error in callback_query_handler: {e}")
@@ -1134,7 +849,7 @@ async def main():
             args.listen_all = True
 
         # Initialize adapters once connected
-        await init_adapters_from_config(yaml_cfg, args.debug)
+        await init_adapters_from_config(yaml_cfg)
 
         if args.listen:
             listen_chat_entity = args.listen
@@ -1144,56 +859,16 @@ async def main():
                 pass # It's a username
             
             logger.info(f"Listening for new messages in '{listen_chat_entity}'... Press Ctrl+C to stop.")
-            
-            # Start monitoring task if debug is enabled
-            monitor_task = None
-            if args.debug:
-                monitor_task = asyncio.create_task(_monitor_asyncio_tasks(client))
-            
             # Register handlers
-            if args.debug:
-                # Wrap handlers with debug logging
-                def debug_new_message_handler(event):
-                    logger.info(f"[DEBUG] Telethon NewMessage event triggered for chat {getattr(event, 'chat_id', 'unknown')}")
-                    return message_event_handler(event, args)
-                
-                def debug_edited_message_handler(event):
-                    logger.info(f"[DEBUG] Telethon MessageEdited event triggered for chat {getattr(event, 'chat_id', 'unknown')}")
-                    return message_event_handler(event, args)
-                
-                client.add_event_handler(debug_new_message_handler, events.NewMessage(chats=listen_chat_entity))
-                client.add_event_handler(debug_edited_message_handler, events.MessageEdited(chats=listen_chat_entity))
-                
-                if args.botToken:
-                    def debug_callback_handler(event):
-                        logger.info(f"[DEBUG] Telethon CallbackQuery event triggered for chat {getattr(event, 'chat_id', 'unknown')}")
-                        return callback_query_handler(event, args)
-                    client.add_event_handler(debug_callback_handler, CallbackQuery(chats=listen_chat_entity))
-            else:
-                client.add_event_handler(lambda event: message_event_handler(event, args), events.NewMessage(chats=listen_chat_entity))
-                client.add_event_handler(lambda event: message_event_handler(event, args), events.MessageEdited(chats=listen_chat_entity))
-                if args.botToken:
-                    client.add_event_handler(lambda event: callback_query_handler(event, args), CallbackQuery(chats=listen_chat_entity))
-            
-            try:
-                # Run until disconnected
-                await client.run_until_disconnected()
-            finally:
-                if monitor_task:
-                    monitor_task.cancel()
-                    try:
-                        await monitor_task
-                    except asyncio.CancelledError:
-                        pass
+            client.add_event_handler(lambda event: message_event_handler(event, args), events.NewMessage(chats=listen_chat_entity))
+            client.add_event_handler(lambda event: message_event_handler(event, args), events.MessageEdited(chats=listen_chat_entity))
+            if args.botToken:
+                client.add_event_handler(lambda event: callback_query_handler(event, args), CallbackQuery(chats=listen_chat_entity))
+            # Run until disconnected
+            await client.run_until_disconnected()
         
         elif args.listen_private:
             logger.info("Listening for all incoming private messages... Press Ctrl+C to stop.")
-            
-            # Start monitoring task if debug is enabled
-            monitor_task = None
-            if args.debug:
-                monitor_task = asyncio.create_task(_monitor_asyncio_tasks(client))
-            
             # Register the handler with a filter for incoming private messages
             client.add_event_handler(
                 lambda event: message_event_handler(event, args),
@@ -1208,68 +883,25 @@ async def main():
                     lambda event: callback_query_handler(event, args),
                     CallbackQuery(func=lambda e: e.is_private)
                 )
-            
-            try:
-                await client.run_until_disconnected()
-            finally:
-                if monitor_task:
-                    monitor_task.cancel()
-                    try:
-                        await monitor_task
-                    except asyncio.CancelledError:
-                        pass
+            await client.run_until_disconnected()
 
         elif args.listen_all:
             logger.info("Listening for all incoming messages from every chat... Press Ctrl+C to stop.")
-            
-            # Start monitoring task if debug is enabled
-            monitor_task = None
-            if args.debug:
-                monitor_task = asyncio.create_task(_monitor_asyncio_tasks(client))
-            
             # Register a handler for all messages without any filters
-            if args.debug:
-                # Wrap handlers with debug logging for listen_all
-                def debug_new_message_handler_all(event):
-                    logger.info(f"[DEBUG] Telethon NewMessage event (listen_all) triggered for chat {getattr(event, 'chat_id', 'unknown')}")
-                    return message_event_handler(event, args)
-                
-                def debug_edited_message_handler_all(event):
-                    logger.info(f"[DEBUG] Telethon MessageEdited event (listen_all) triggered for chat {getattr(event, 'chat_id', 'unknown')}")
-                    return message_event_handler(event, args)
-                
-                client.add_event_handler(debug_new_message_handler_all, events.NewMessage())
-                client.add_event_handler(debug_edited_message_handler_all, events.MessageEdited())
-                
-                if args.botToken:
-                    def debug_callback_handler_all(event):
-                        logger.info(f"[DEBUG] Telethon CallbackQuery event (listen_all) triggered for chat {getattr(event, 'chat_id', 'unknown')}")
-                        return callback_query_handler(event, args)
-                    client.add_event_handler(debug_callback_handler_all, CallbackQuery())
-            else:
+            client.add_event_handler(
+                lambda event: message_event_handler(event, args),
+                events.NewMessage()
+            )
+            client.add_event_handler(
+                lambda event: message_event_handler(event, args),
+                events.MessageEdited()
+            )
+            if args.botToken:
                 client.add_event_handler(
-                    lambda event: message_event_handler(event, args),
-                    events.NewMessage()
+                    lambda event: callback_query_handler(event, args),
+                    CallbackQuery()
                 )
-                client.add_event_handler(
-                    lambda event: message_event_handler(event, args),
-                    events.MessageEdited()
-                )
-                if args.botToken:
-                    client.add_event_handler(
-                        lambda event: callback_query_handler(event, args),
-                        CallbackQuery()
-                    )
-            
-            try:
-                await client.run_until_disconnected()
-            finally:
-                if monitor_task:
-                    monitor_task.cancel()
-                    try:
-                        await monitor_task
-                    except asyncio.CancelledError:
-                        pass
+            await client.run_until_disconnected()
 
         elif args.list_chats:
             await list_chats(client, args)
