@@ -1,0 +1,16 @@
+# Ignore any local credential files
+secret.yaml
+*-credentials.yaml
+*-credentials.env
+telegram-secret*.yaml
+*.key
+*.pem
+
+# Ignore any backup files
+*-backup.yaml
+*-backup.json
+all-secrets-backup.yaml
+
+# Ignore any local test files
+test-*.yaml
+tmp-*.yaml

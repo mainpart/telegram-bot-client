@@ -5,6 +5,7 @@ import configparser
 import argparse
 import json
 import sys
+import os
 import warnings
 from datetime import datetime, timezone, timedelta
 from getpass import getpass
@@ -15,7 +16,8 @@ from telethon.tl.types import InputPeerEmpty, InputMessagesFilterEmpty
 from telethon import events
 
 # --- Configuration ---
-SESSION_NAME = 'anon' 
+SESSION_DIR = os.getenv('SESSION_DIR', '.')
+SESSION_NAME = os.path.join(SESSION_DIR, 'anon') 
 
 # --- Setup ---
 warnings.filterwarnings("ignore", message="The session already had an authorized user.*")
@@ -415,6 +417,7 @@ async def main():
     parser.add_argument('--download', action='store_true', help='Download file from message.')
     parser.add_argument('--addReaction', type=str, help='Add reaction (emoji) to a message specified by --messageId.')
     parser.add_argument('--debug', action='store_true', help='Enable debug logging.')
+    parser.add_argument('--init', action='store_true', help='Initialize Telegram session (interactive auth). Exit after successful auth.')
     
     # Message filtering options
     parser.add_argument('--incoming-only', action='store_true', help='Filter only incoming messages.')
@@ -447,25 +450,43 @@ async def main():
 
     load_profiles() # Load the profiles at the start
 
-    config = configparser.ConfigParser()
-    config.read('config.ini')
+    # Priority 1: Try to load from environment variables (Kubernetes secrets)
+    phone_number = os.getenv('TELEGRAM_PHONE_NUMBER')
+    api_id_str = os.getenv('TELEGRAM_API_ID')
+    api_hash = os.getenv('TELEGRAM_API_HASH')
     
-    phone_number = config.get('telegram', 'phone_number', fallback=None)
-    api_id_str = config.get('telegram', 'api_id', fallback=None)
-    api_hash = config.get('telegram', 'api_hash', fallback=None)
+    config_source = None
+    
+    # If not found in environment, fall back to config.ini
+    if not phone_number or not api_id_str or not api_hash:
+        logger.info("Telegram credentials not found in environment variables, trying config.ini...")
+        config = configparser.ConfigParser()
+        config.read('config.ini')
+        
+        if not phone_number:
+            phone_number = config.get('telegram', 'phone_number', fallback=None)
+        if not api_id_str:
+            api_id_str = config.get('telegram', 'api_id', fallback=None)
+        if not api_hash:
+            api_hash = config.get('telegram', 'api_hash', fallback=None)
+        config_source = "config.ini"
+    else:
+        logger.info("Using Telegram credentials from environment variables (Kubernetes secrets)")
+        config_source = "environment variables"
 
+    # Validate credentials
     if not phone_number or phone_number == 'YOUR_PHONE_NUMBER_HERE':
-        logger.error("Phone number not set in config.ini")
+        logger.error(f"Phone number not set in {config_source or 'config.ini'}")
         return
     
     if not api_id_str or api_id_str == 'YOUR_API_ID_HERE' or not api_hash or api_hash == 'YOUR_API_HASH_HERE':
-        logger.error("API ID or API Hash not set in config.ini")
+        logger.error(f"API ID or API Hash not set in {config_source or 'config.ini'}")
         return
         
     try:
         api_id = int(api_id_str)
     except ValueError:
-        logger.error("Invalid api_id in config.ini. It must be an integer.")
+        logger.error(f"Invalid api_id in {config_source or 'config.ini'}. It must be an integer.")
         return
 
     client = TelegramClient(SESSION_NAME, api_id, api_hash)
@@ -480,16 +501,38 @@ async def main():
 
     try:
         await client.connect()
-        if not await client.is_user_authorized():
-            logger.warning("User not authorized. Sending code request.")
+        
+        # Handle --init mode: interactive authentication
+        if args.init:
+            logger.info("Initialization mode: checking authorization status...")
+            if await client.is_user_authorized():
+                logger.info("✓ User already authorized. Session file exists and is valid.")
+                logger.info(f"Session file location: {SESSION_NAME}.session")
+                return  # Exit successfully
+            
+            logger.info("User not authorized. Starting interactive authentication...")
             await client.send_code_request(phone_number)
             try:
-                await client.sign_in(phone_number, getpass('Enter the code: '))
+                code = input('Enter the code you received: ')
+                await client.sign_in(phone_number, code)
+                logger.info("✓ Successfully authenticated!")
             except SessionPasswordNeededError:
-                await client.sign_in(password=getpass('Enter your 2FA password: '))
+                password = getpass('Enter your 2FA password: ')
+                await client.sign_in(password=password)
+                logger.info("✓ Successfully authenticated with 2FA!")
             except Exception as e:
-                logger.error(f"Failed to sign in: {e}")
-                return
+                logger.error(f"✗ Failed to sign in: {e}")
+                sys.exit(1)
+            
+            logger.info(f"Session file created: {SESSION_NAME}.session")
+            logger.info("Initialization complete. You can now run the main container.")
+            return  # Exit successfully after init
+        
+        # Normal operation: check if authorized
+        if not await client.is_user_authorized():
+            logger.error("User not authorized. Please run with --init first to create session.")
+            logger.error("Or ensure the session file exists in the SESSION_DIR.")
+            sys.exit(1)
 
         if args.listen:
             listen_chat_entity = args.listen

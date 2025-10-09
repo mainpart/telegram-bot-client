@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram-bot-client
+  namespace: duke
+  labels:
+    app: telegram-bot-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: telegram-bot-client
+  strategy:
+    type: Recreate  # Важно! Только один pod может работать с session файлом
+  template:
+    metadata:
+      labels:
+        app: telegram-bot-client
+    spec:
+      # Init-контейнер для создания сессии
+      initContainers:
+      - name: telegram-init
+        image: dmitry138/telegram-bot-client:latest
+        imagePullPolicy: Always
+        command: 
+          - python
+          - telegram_bot_client.py
+          - --init
+        env:
+          - name: TELEGRAM_PHONE_NUMBER
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: phone_number
+          - name: TELEGRAM_API_ID
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: api_id
+          - name: TELEGRAM_API_HASH
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: api_hash
+          - name: SESSION_DIR
+            value: "/data"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+        volumeMounts:
+          - name: session-storage
+            mountPath: /data
+        # Init контейнер требует TTY для интерактивного ввода
+        # При первом запуске нужно будет подключиться: kubectl attach
+        stdin: true
+        tty: true
+      
+      # Основной контейнер
+      containers:
+      - name: telegram-bot
+        image: dmitry138/telegram-bot-client:latest
+        imagePullPolicy: Always
+        # Здесь можно указать команду для основного контейнера
+        # Например, listen для определенного чата:
+        # command: 
+        #   - python
+        #   - telegram_bot_client.py
+        #   - --listen-all
+        # Или оставить пустым и использовать kubectl exec для команд
+        command:
+          - /bin/sh
+          - -c
+          - |
+            echo "Telegram Bot Client is ready. Session file exists."
+            echo "Use 'kubectl exec' to run commands."
+            echo "Example: kubectl exec -n duke deployment/telegram-bot-client -- python telegram_bot_client.py --list-chats"
+            # Keep container running
+            tail -f /dev/null
+        env:
+          - name: TELEGRAM_PHONE_NUMBER
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: phone_number
+          - name: TELEGRAM_API_ID
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: api_id
+          - name: TELEGRAM_API_HASH
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: api_hash
+          - name: SESSION_DIR
+            value: "/data"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+        volumeMounts:
+          - name: session-storage
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+      
+      volumes:
+      - name: session-storage
+        persistentVolumeClaim:
+          claimName: telegram-session-storage

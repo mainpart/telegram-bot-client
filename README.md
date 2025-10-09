@@ -25,6 +25,19 @@ This script is a command-line tool for interacting with Telegram as a user. It i
 
 2.  **Configure the application**: 
     
+    The application supports two methods for providing credentials (in order of priority):
+    
+    **Method 1: Environment Variables (recommended for Docker/Kubernetes)**
+    
+    Set the following environment variables:
+    ```bash
+    export TELEGRAM_API_ID="YOUR_API_ID"
+    export TELEGRAM_API_HASH="YOUR_API_HASH"
+    export TELEGRAM_PHONE_NUMBER="+1234567890"
+    ```
+    
+    **Method 2: Configuration File (fallback for local development)**
+    
     a. Rename the configuration template:
     ```bash
     cp config.ini-default config.ini
@@ -40,6 +53,8 @@ This script is a command-line tool for interacting with Telegram as a user. It i
     ```
 
     Replace the placeholder values with your actual credentials.
+    
+    **Note:** Environment variables take precedence over config.ini. If any credential is missing from environment variables, the application will fall back to config.ini for that value.
 
 ### Getting API Credentials
 
@@ -88,6 +103,7 @@ The script is controlled via command-line arguments. The primary actions are fet
 *   `--listen <chat_id>`: Subscribe to a specific chat and listen for new messages in real-time.
 *   `--listen-private`: Subscribe to all incoming private (one-to-one) messages.
 *   `--listen-all`: Subscribe to all incoming messages from every chat and channel.
+*   `--init`: Initialize Telegram session interactively. Creates `anon.session` file and exits. Used in Kubernetes init-container.
 
 **Message Filtering Options**:
 *   `--incoming-only`: Filter only incoming messages (from others to you).
@@ -271,4 +287,62 @@ To see detailed logs of what the script is doing, add the `--debug` flag to any 
 
 ```bash
 python3 telegram_bot_client.py --chat <username> --debug
-``` 
+```
+
+## Deployment
+
+### Docker
+
+The application is containerized and automatically built via GitHub Actions.
+
+Docker image: `mainparthub/telegram-bot-client:latest`
+
+```bash
+docker pull mainparthub/telegram-bot-client:latest
+```
+
+### Kubernetes
+
+Full Kubernetes deployment with two-phase initialization (init-container + main container) and persistent session storage.
+
+**Architecture:**
+- Init-container: Interactive authentication to create session file
+- Main container: Uses persistent session for Telegram operations  
+- Longhorn PVC: Stores session file between restarts
+- Kubernetes Secret: Stores API credentials
+
+**Quick start:**
+
+```bash
+cd k8s
+./deploy-all.sh
+```
+
+Then initialize the session (first time only):
+```bash
+# Get pod name
+kubectl get pods -n duke
+
+# Attach to init container for authentication
+kubectl attach -it -n duke <POD_NAME> -c telegram-init
+
+# Enter Telegram code when prompted
+```
+
+**Common operations:**
+```bash
+# List chats
+kubectl exec -n duke deployment/telegram-bot-client -- \
+  python telegram_bot_client.py --list-chats --limit 20
+
+# Send message
+kubectl exec -n duke deployment/telegram-bot-client -- \
+  python telegram_bot_client.py --chat @username --sendMessage "Hello!"
+```
+
+📖 **Full documentation:** [k8s/README.md](k8s/README.md)  
+🚀 **Quick reference:** [k8s/QUICKSTART.md](k8s/QUICKSTART.md)
+
+### Google Cloud Run
+
+See [GCLOUD.md](GCLOUD.md) for Google Cloud Run deployment instructions. 
