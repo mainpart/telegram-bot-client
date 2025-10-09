@@ -1,0 +1,27 @@
+#!/bin/bash
+
+# Telegram Bot Client - Quick command wrapper
+# Usage: 
+#   ./tg list-chats
+#   ./tg get-updates @username --limit 10
+#   ./tg send @username "Hello!"
+
+NAMESPACE="duke"
+DEPLOYMENT="telegram-bot-client"
+
+if [ $# -eq 0 ]; then
+    echo "Usage: $0 <command> [args...]"
+    echo ""
+    echo "Examples:"
+    echo "  $0 --list-chats --limit 20"
+    echo "  $0 --chat @username --limit 10"
+    echo "  $0 --chat @username --sendMessage \"Hello!\""
+    echo "  $0 --search \"keyword\""
+    echo ""
+    echo "Or connect to shell:"
+    echo "  ./connect-shell.sh"
+    exit 1
+fi
+
+kubectl exec -n $NAMESPACE deployment/$DEPLOYMENT -- python telegram_bot_client.py "$@"
+

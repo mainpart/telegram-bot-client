@@ -23,9 +23,13 @@ spec:
         image: mainparthub/telegram-bot-client:k8s-deployment
         imagePullPolicy: Always
         command: 
-          - python
-          - telegram_bot_client.py
-          - --init
+          - sh
+          - -c
+          - |
+            chown -R appuser:appuser /data
+            su appuser -c "python telegram_bot_client.py --init"
+        securityContext:
+          runAsUser: 0
         env:
           - name: TELEGRAM_PHONE_NUMBER
             valueFrom:
