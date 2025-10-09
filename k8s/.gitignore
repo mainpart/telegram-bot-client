@@ -1,5 +1,6 @@
 # Ignore any local credential files
 secret.yaml
+secret-create.sh
 *-credentials.yaml
 *-credentials.env
 telegram-secret*.yaml
