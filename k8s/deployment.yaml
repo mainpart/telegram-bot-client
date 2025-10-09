@@ -20,7 +20,7 @@ spec:
       # Init-контейнер для создания сессии
       initContainers:
       - name: telegram-init
-        image: dmitry138/telegram-bot-client:latest
+        image: mainparthub/telegram-bot-client:k8s-deployment
         imagePullPolicy: Always
         command: 
           - python
@@ -57,7 +57,7 @@ spec:
       # Основной контейнер
       containers:
       - name: telegram-bot
-        image: dmitry138/telegram-bot-client:latest
+        image: mainparthub/telegram-bot-client:k8s-deployment
         imagePullPolicy: Always
         # Здесь можно указать команду для основного контейнера
         # Например, listen для определенного чата:
