@@ -607,5 +607,7 @@ async def main():
 if __name__ == '__main__':
     try:
         asyncio.run(main())
-    except (KeyboardInterrupt, SystemExit):
-        print("\nExiting gracefully.") 
+    except KeyboardInterrupt:
+        print("\nExiting gracefully.")
+    except SystemExit:
+        raise  # Preserve exit code 

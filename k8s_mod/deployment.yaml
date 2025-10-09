@@ -1,0 +1,99 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: telegram-bot-client
+  labels:
+    app: telegram-bot-client
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: telegram-bot-client
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: telegram-bot-client
+    spec:
+      initContainers:
+      - name: telegram-init
+        image: mainparthub/telegram-bot-client:k8s-deployment
+        imagePullPolicy: Always
+        command: 
+          - sh
+          - -c
+          - |
+            chown -R appuser:appuser /data
+            su appuser -c "python telegram_bot_client.py --init"
+        securityContext:
+          runAsUser: 0
+        env:
+          - name: TELEGRAM_PHONE_NUMBER
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: phone_number
+          - name: TELEGRAM_API_ID
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: api_id
+          - name: TELEGRAM_API_HASH
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: api_hash
+          - name: SESSION_DIR
+            value: "/data"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+        volumeMounts:
+          - name: session-storage
+            mountPath: /data
+        stdin: true
+        tty: true
+      
+      containers:
+      - name: telegram-bot
+        image: mainparthub/telegram-bot-client:k8s-deployment
+        imagePullPolicy: Always
+        command:
+          - python
+          - telegram_bot_client.py
+          - --listen-all
+        env:
+          - name: TELEGRAM_PHONE_NUMBER
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: phone_number
+          - name: TELEGRAM_API_ID
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: api_id
+          - name: TELEGRAM_API_HASH
+            valueFrom:
+              secretKeyRef:
+                name: telegram-credentials
+                key: api_hash
+          - name: SESSION_DIR
+            value: "/data"
+          - name: PYTHONUNBUFFERED
+            value: "1"
+        volumeMounts:
+          - name: session-storage
+            mountPath: /data
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+      
+      volumes:
+      - name: session-storage
+        persistentVolumeClaim:
+          claimName: telegram-session-storage
