@@ -16,3 +16,5 @@ ttt.code-workspace
 # IDE
 .cursor/
 .vscode/
+.idea/
+.claude/
