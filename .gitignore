@@ -7,6 +7,17 @@ __pycache__/
 .DS_Store
 *.log
 test.txt
+test_*.py
+
+# Downloaded media
+*.oga
+*.ogg
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.pdf
+*.webp
 ttt.code-workspace
 
 # Byte-compiled / cache

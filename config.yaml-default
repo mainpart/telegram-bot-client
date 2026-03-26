@@ -1,13 +1,14 @@
 telegram:
-  phone_number: YOUR_PHONE_NUMBER_HERE
   api_id: YOUR_API_ID_HERE
   api_hash: YOUR_API_HASH_HERE
+  # session_string: "..." # StringSession token. Also: env TELEGRAM_SESSION
+  # phone_number: "+7..."  # Only needed for --init
 
 # Адаптеры вывода сообщений
 # Доступные типы: stdout, http, mongodb
 adapters:
   - type: stdout
-    enabled: true
+
     pretty: true
   # - type: http
   #   enabled: true
