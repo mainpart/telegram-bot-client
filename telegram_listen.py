@@ -32,19 +32,19 @@ async def main():
     yaml_cfg = load_yaml_config('config.yaml')
 
     # Default to --listen-all if botToken without explicit listen mode
-    if args.botToken and not any([args.listen, args.listen_private, args.listen_all]):
+    if args.bot_token and not any([args.listen, args.listen_private, args.listen_all]):
         args.listen_all = True
 
     if not any([args.listen, args.listen_private, args.listen_all]):
         parser.print_help()
         return
 
-    client = connect_client(yaml_cfg, bot_token=args.botToken)
+    client = connect_client(yaml_cfg, bot_token=args.bot_token)
     if not client:
         return
 
     try:
-        if not await start_client(client, bot_token=args.botToken):
+        if not await start_client(client, bot_token=args.bot_token):
             return
 
         await init_adapters_from_config(yaml_cfg)

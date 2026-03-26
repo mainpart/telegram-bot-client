@@ -7,8 +7,8 @@ from getpass import getpass
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from tg import (
-    logger, load_yaml_config, load_profiles, init_adapters_from_config,
-    close_adapters, connect_client, start_client, add_common_args, parse_chat_id,
+    logger, load_yaml_config, load_profiles,
+    connect_client, start_client, add_common_args, parse_chat_id,
     get_updates, send_message, add_reaction, forward_message,
     send_cross_chat_reply, edit_message, click_button, download_file,
     list_chats, search_messages, search_contacts, get_entities,
@@ -22,26 +22,26 @@ async def main():
     group = parser.add_mutually_exclusive_group()
     group.add_argument('--init', action='store_true', help='Login and generate StringSession token.')
     group.add_argument('--list-chats', action='store_true', help='List recent chats.')
-    group.add_argument('--searchMessages', type=str, help='Search message text across all chats.')
-    group.add_argument('--searchContacts', type=str, help='Search contacts/users by name or username.')
+    group.add_argument('--search-messages', type=str, help='Search message text across all chats.')
+    group.add_argument('--search-contacts', type=str, help='Search contacts/users by name or username.')
 
     parser.add_argument('--chat', type=str, help='Chat username or ID.')
-    parser.add_argument('--fromId', type=int, help='Start message ID.')
-    parser.add_argument('--toId', type=int, help='End message ID.')
+    parser.add_argument('--from-id', type=int, help='Start message ID.')
+    parser.add_argument('--to-id', type=int, help='End message ID.')
     parser.add_argument('--inclusive', action='store_true', help='Include boundary messages.')
     parser.add_argument('--forward', action='store_true', help='Read newer messages.')
     parser.add_argument('--backward', action='store_true', help='Read older messages.')
-    parser.add_argument('--sendMessage', type=str, help='Text to send.')
-    parser.add_argument('--sendFiles', nargs='+', help='Files to send.')
-    parser.add_argument('--replyTo', type=int, help='Message ID to reply to.')
-    parser.add_argument('--targetChat', type=str, help='Target chat for forward/cross-chat reply.')
-    parser.add_argument('--clickButton', type=str, help='Button text to click.')
-    parser.add_argument('--messageId', type=int, help='Message ID for actions.')
-    parser.add_argument('--forwardMessage', action='store_true', help='Forward message.')
-    parser.add_argument('--replyMessage', type=str, help='Reply text.')
+    parser.add_argument('--send-message', type=str, help='Text to send.')
+    parser.add_argument('--send-files', nargs='+', help='Files to send.')
+    parser.add_argument('--reply-to', type=int, help='Message ID to reply to.')
+    parser.add_argument('--target-chat', type=str, help='Target chat for forward/cross-chat reply.')
+    parser.add_argument('--click-button', type=str, help='Button text to click.')
+    parser.add_argument('--message-id', type=int, help='Message ID for actions.')
+    parser.add_argument('--forward-message', action='store_true', help='Forward message.')
+    parser.add_argument('--reply-message', type=str, help='Reply text.')
     parser.add_argument('--download', action='store_true', help='Download file from message.')
-    parser.add_argument('--addReaction', type=str, help='Add reaction emoji.')
-    parser.add_argument('--editMessage', type=str, help='New text for message.')
+    parser.add_argument('--add-reaction', type=str, help='Add reaction emoji.')
+    parser.add_argument('--edit-message', type=str, help='New text for message.')
     parser.add_argument('--get-entities', nargs='+', help='Get info for users/chats by ID or username.')
     add_common_args(parser)
     args = parser.parse_args()
@@ -90,73 +90,71 @@ async def main():
             await client.disconnect()
         return
 
-    client = connect_client(yaml_cfg, bot_token=args.botToken)
+    client = connect_client(yaml_cfg, bot_token=args.bot_token)
     if not client:
         return
 
     chat_entity = parse_chat_id(args.chat)
-    target_chat_entity = parse_chat_id(getattr(args, 'targetChat', None))
+    target_chat_entity = parse_chat_id(getattr(args, 'target_chat', None))
 
     try:
-        if not await start_client(client, bot_token=args.botToken):
+        if not await start_client(client, bot_token=args.bot_token):
             return
-
-        await init_adapters_from_config(yaml_cfg)
 
         def output(data):
             print(json.dumps(data, indent=2, ensure_ascii=False))
 
         if args.list_chats:
             output(await list_chats(client, args.limit, args.profile))
-        elif args.searchMessages:
-            output(await search_messages(client, args.searchMessages, args.limit, args.profile))
-        elif args.searchContacts:
-            output(await search_contacts(client, args.searchContacts, args.limit, args.profile))
+        elif args.search_messages:
+            output(await search_messages(client, args.search_messages, args.limit, args.profile))
+        elif args.search_contacts:
+            output(await search_contacts(client, args.search_contacts, args.limit, args.profile))
         elif args.get_entities:
             output(await get_entities(client, args.get_entities, args.profile))
-        elif args.forwardMessage:
-            if not (chat_entity and target_chat_entity and args.messageId):
-                logger.error("--forwardMessage requires --chat, --messageId and --targetChat.")
+        elif args.forward_message:
+            if not (chat_entity and target_chat_entity and args.message_id):
+                logger.error("--forward-message requires --chat, --message-id and --target-chat.")
                 return
-            await forward_message(client, chat_entity, args.messageId, target_chat_entity)
-        elif args.replyMessage:
-            if not (chat_entity and args.messageId):
-                logger.error("--replyMessage requires --chat and --messageId.")
+            await forward_message(client, chat_entity, args.message_id, target_chat_entity)
+        elif args.reply_message:
+            if not (chat_entity and args.message_id):
+                logger.error("--reply-message requires --chat and --message-id.")
                 return
             if target_chat_entity:
-                if args.sendFiles:
-                    logger.error("--replyMessage with --targetChat does not support files.")
+                if args.send_files:
+                    logger.error("--reply-message with --target-chat does not support files.")
                     return
-                await send_cross_chat_reply(client, target_chat_entity, args.replyMessage, None, args.messageId, chat_entity)
+                await send_cross_chat_reply(client, target_chat_entity, args.reply_message, None, args.message_id, chat_entity)
             else:
-                await send_message(client, chat_entity, args.replyMessage, args.sendFiles, args.messageId)
-        elif args.sendMessage or args.sendFiles:
+                await send_message(client, chat_entity, args.reply_message, args.send_files, args.message_id)
+        elif args.send_message or args.send_files:
             if not chat_entity:
-                logger.error("--chat is required for --sendMessage/--sendFiles.")
+                logger.error("--chat is required for --send-message/--send-files.")
                 return
-            await send_message(client, chat_entity, args.sendMessage, args.sendFiles, args.replyTo)
-        elif args.clickButton:
-            if not chat_entity or not args.messageId:
-                logger.error("--chat and --messageId are required for --clickButton.")
+            await send_message(client, chat_entity, args.send_message, args.send_files, args.reply_to)
+        elif args.click_button:
+            if not chat_entity or not args.message_id:
+                logger.error("--chat and --message-id are required for --click-button.")
                 return
-            await click_button(client, chat_entity, args.messageId, args.clickButton)
+            await click_button(client, chat_entity, args.message_id, args.click_button)
         elif args.download:
-            if not chat_entity or not args.messageId:
-                logger.error("--chat and --messageId are required for --download.")
+            if not chat_entity or not args.message_id:
+                logger.error("--chat and --message-id are required for --download.")
                 return
-            path = await download_file(client, chat_entity, args.messageId)
+            path = await download_file(client, chat_entity, args.message_id)
             if path:
                 print(f"File downloaded to: {path}")
-        elif args.addReaction:
-            if not chat_entity or not args.messageId:
-                logger.error("--chat and --messageId are required for --addReaction.")
+        elif args.add_reaction:
+            if not chat_entity or not args.message_id:
+                logger.error("--chat and --message-id are required for --add-reaction.")
                 return
-            await add_reaction(client, chat_entity, args.messageId, args.addReaction)
-        elif args.editMessage:
-            if not chat_entity or not args.messageId:
-                logger.error("--chat and --messageId are required for --editMessage.")
+            await add_reaction(client, chat_entity, args.message_id, args.add_reaction)
+        elif args.edit_message:
+            if not chat_entity or not args.message_id:
+                logger.error("--chat and --message-id are required for --edit-message.")
                 return
-            await edit_message(client, chat_entity, args.messageId, args.editMessage)
+            await edit_message(client, chat_entity, args.message_id, args.edit_message)
         else:
             if not chat_entity:
                 logger.error("A --chat must be provided to fetch updates.")
@@ -166,10 +164,6 @@ async def main():
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
     finally:
-        try:
-            await close_adapters()
-        except Exception as e:
-            logger.error(f"Failed to close adapters: {e}")
         if client.is_connected():
             await client.disconnect()
 

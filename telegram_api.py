@@ -1,6 +1,5 @@
 import argparse
 import asyncio
-import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Query, Path, Body, HTTPException
 from fastapi.responses import FileResponse
@@ -58,7 +57,7 @@ app = FastAPI(title="Telegram API", lifespan=lifespan)
 
 def make_args(**kwargs):
     defaults = dict(
-        fromId=None, toId=None, limit=None,
+        from_id=None, to_id=None, limit=None,
         forward=False, backward=False, inclusive=False,
         profile='default',
         incoming_only=False, outgoing_only=False,
@@ -91,7 +90,7 @@ async def api_get_messages(
     has_reactions: bool = False,
 ):
     args = make_args(
-        fromId=fromId, toId=toId, inclusive=inclusive,
+        from_id=fromId, to_id=toId, inclusive=inclusive,
         forward=forward, backward=backward,
         limit=limit, profile=profile,
         incoming_only=incoming_only, outgoing_only=outgoing_only,

@@ -1,8 +1,18 @@
-# Telegram User Client CLI
+# Telegram Client
 
-CLI для работы с Telegram через пользовательский аккаунт. Для автоматизации, скриптов и интеграций.
+CLI and REST API for interacting with Telegram via a user account. Designed for automation, scripting and integrations.
 
-## Установка
+## Project Structure
+
+```
+telegram_cli.py        — CLI for one-shot commands (read, send, search, download)
+telegram_listen.py     — Real-time message listener with output adapters
+telegram_api.py        — REST API server (FastAPI)
+tg/                    — Shared library (core, commands, listeners)
+adapters/              — Output adapters (stdout, http, mongodb, rabbitmq)
+```
+
+## Installation
 
 ```bash
 python3 -m venv .venv
@@ -10,19 +20,20 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-Дополнительные зависимости для адаптеров (ставить по необходимости):
+Optional dependencies (install as needed):
 
 ```bash
-pip install aiohttp    # для http адаптера
-pip install motor      # для mongodb адаптера
-pip install aio-pika   # для rabbitmq адаптера
+pip install fastapi uvicorn    # for telegram_api.py
+pip install aiohttp            # for http adapter
+pip install motor              # for mongodb adapter
+pip install aio-pika           # for rabbitmq adapter
 ```
 
-## Настройка
+## Setup
 
-1. Получите `api_id` и `api_hash` на [my.telegram.org](https://my.telegram.org)
+1. Get `api_id` and `api_hash` at [my.telegram.org](https://my.telegram.org)
 
-2. Создайте `config.yaml` (или скопируйте из `config.yaml-default`):
+2. Create `config.yaml` (or copy from `config.yaml-default`):
 
 ```yaml
 telegram:
@@ -30,300 +41,255 @@ telegram:
   api_hash: "a1b2c3d4e5f6..."
 ```
 
-3. Сгенерируйте сессию:
+3. Generate a session token:
 
 ```bash
-python telegram_bot_client.py --init
+python telegram_cli.py --init
 ```
 
-Токен автоматически запишется в `config.yaml`. Можно также задать через переменную окружения:
+The token is saved to `config.yaml` automatically. Alternatively, set it via environment variable:
 
 ```bash
 export TELEGRAM_SESSION="..."
 ```
 
-## Команды
+Phone number can be specified in config (only needed for `--init`):
+
+```yaml
+telegram:
+  phone_number: "+79001234567"
+```
+
+## telegram_cli.py
+
+One-shot commands. Outputs JSON to stdout, errors to stderr.
 
 ### --init
 
-Интерактивный логин и генерация StringSession токена. Спросит номер телефона, код подтверждения и 2FA пароль (если включён). Токен сохраняется в `config.yaml`.
+Interactive login. Prompts for phone number, confirmation code and 2FA password (if enabled). Saves the StringSession token to `config.yaml`.
 
 ```bash
-# Логин с номером из конфига
-python telegram_bot_client.py --init
-
-# Номер телефона можно указать в config.yaml:
-# telegram:
-#   phone_number: "+79001234567"
+python telegram_cli.py --init
 ```
 
-### --chat
+### Reading Messages (--chat)
 
-Чтение сообщений из чата. Без дополнительных параметров выводит последние 20 сообщений.
+`--chat` accepts a username (`mike_kuleshov`) or numeric ID (`1744485600`, `-1001605174968`). Groups often don't have usernames — use their numeric ID (find via `--search-contacts` or `--list-chats`).
 
-`--chat` принимает username (`mike_kuleshov`) или числовой ID (`1744485600`, `-1001605174968`). У групп часто нет username — используйте ID (найти через `--searchContacts` или `--list-chats`).
+Without additional arguments, returns the last 20 messages.
 
 ```bash
-# Последние 20 сообщений (по умолчанию)
-python telegram_bot_client.py --chat mike_kuleshov
+# Last 20 messages (default)
+python telegram_cli.py --chat mike_kuleshov
 
-# По числовому ID
-python telegram_bot_client.py --chat -1001605174968
+# By numeric ID
+python telegram_cli.py --chat -1001605174968
 
-# Указать количество
-python telegram_bot_client.py --chat mike_kuleshov --limit 100
+# Specify limit
+python telegram_cli.py --chat mike_kuleshov --limit 100
 
-# Все сообщения без лимита
-python telegram_bot_client.py --chat mike_kuleshov --limit 0
+# All messages (no limit)
+python telegram_cli.py --chat mike_kuleshov --limit 0
 
-# Читать назад (старее) от сообщения ID 5000
-python telegram_bot_client.py --chat mike_kuleshov --fromId 5000
+# Read backward (older) from message ID 5000
+python telegram_cli.py --chat mike_kuleshov --from-id 5000
 
-# Читать вперёд (новее) от сообщения ID 5000
-python telegram_bot_client.py --chat mike_kuleshov --fromId 5000 --forward
+# Read forward (newer) from message ID 5000
+python telegram_cli.py --chat mike_kuleshov --from-id 5000 --forward
 
-# Диапазон от 1000 до 2000 (границы не включены)
-python telegram_bot_client.py --chat mike_kuleshov --fromId 1000 --toId 2000 --forward
+# Range from 1000 to 2000 (boundaries excluded)
+python telegram_cli.py --chat mike_kuleshov --from-id 1000 --to-id 2000 --forward
 
-# Диапазон с включением границ
-python telegram_bot_client.py --chat mike_kuleshov --fromId 1000 --toId 2000 --forward --inclusive
+# Range with boundaries included
+python telegram_cli.py --chat mike_kuleshov --from-id 1000 --to-id 2000 --forward --inclusive
 
-# С фильтром по профилю
-python telegram_bot_client.py --chat mike_kuleshov --limit 50 --profile dialogue
+# With filtering profile
+python telegram_cli.py --chat mike_kuleshov --limit 50 --profile dialogue
 
-# Только входящие сообщения с медиа
-python telegram_bot_client.py --chat mike_kuleshov --limit 50 --incoming-only --has-media
+# Only incoming messages with media
+python telegram_cli.py --chat mike_kuleshov --limit 50 --incoming-only --has-media
 
-# Только сообщения с текстом по регулярному выражению
-python telegram_bot_client.py --chat mike_kuleshov --pattern "привет|hello"
+# Messages matching a regex pattern
+python telegram_cli.py --chat mike_kuleshov --pattern "hello|привет"
 
-# Сообщения от конкретного пользователя
-python telegram_bot_client.py --chat mike_kuleshov --from-user 809799943
+# Messages from a specific user
+python telegram_cli.py --chat -1001605174968 --from-user 809799943
 
-# Только пересланные
-python telegram_bot_client.py --chat mike_kuleshov --forwarded-only
+# Only forwarded messages
+python telegram_cli.py --chat mike_kuleshov --forwarded-only
 
-# Только ответы
-python telegram_bot_client.py --chat mike_kuleshov --replies-only
+# Only replies
+python telegram_cli.py --chat mike_kuleshov --replies-only
 
-# Только с реакциями
-python telegram_bot_client.py --chat mike_kuleshov --has-reactions
+# Only messages with reactions
+python telegram_cli.py --chat mike_kuleshov --has-reactions
 
-# Только исходящие
-python telegram_bot_client.py --chat mike_kuleshov --outgoing-only
+# Only outgoing messages
+python telegram_cli.py --chat mike_kuleshov --outgoing-only
 ```
 
-### --listen
+### Search
 
-Подписка на новые сообщения в реальном времени. Выводит JSON каждого нового или отредактированного сообщения. Ctrl+C для остановки.
+#### --search-contacts
+
+Search contacts, users, channels and groups by name or username. Uses Telegram's `contacts.Search` API.
 
 ```bash
-# Конкретный чат по username
-python telegram_bot_client.py --listen mike_kuleshov
+# Search by name
+python telegram_cli.py --search-contacts "Михаил Кулешов"
 
-# Конкретный чат по ID
-python telegram_bot_client.py --listen -1001605174968
+# Partial name
+python telegram_cli.py --search-contacts "Кулешов"
 
-# С профилем фильтрации
-python telegram_bot_client.py --listen mike_kuleshov --profile dialogue
-
-# Только входящие с медиа
-python telegram_bot_client.py --listen mike_kuleshov --incoming-only --has-media
+# With limit (default 20)
+python telegram_cli.py --search-contacts "марс и венера" --limit 5
 ```
 
-### --listen-private
+#### --search-messages
 
-Подписка на все входящие личные сообщения.
-
-```bash
-python telegram_bot_client.py --listen-private
-
-# С фильтром по паттерну
-python telegram_bot_client.py --listen-private --pattern "срочно"
-```
-
-### --listen-all
-
-Подписка на все сообщения из всех чатов и каналов.
+Search message text across all chats. Results are grouped by chat.
 
 ```bash
-python telegram_bot_client.py --listen-all
+# Simple search
+python telegram_cli.py --search-messages "search query"
 
-# С профилем
-python telegram_bot_client.py --listen-all --profile dialogue
-```
+# With limit (default 100)
+python telegram_cli.py --search-messages "search query" --limit 50
 
-### --searchMessages
-
-Поиск по тексту сообщений во всех чатах. Результаты группируются по чатам.
-
-```bash
-# Простой поиск
-python telegram_bot_client.py --searchMessages "текст запроса"
-
-# С лимитом результатов (по умолчанию 100)
-python telegram_bot_client.py --searchMessages "текст запроса" --limit 50
-
-# С профилем для очистки вывода
-python telegram_bot_client.py --searchMessages "текст запроса" --profile dialogue
-```
-
-### --searchContacts
-
-Поиск контактов, пользователей, каналов и групп по имени или username. Использует `contacts.Search` API Telegram.
-
-```bash
-# Поиск по имени
-python telegram_bot_client.py --searchContacts "Михаил Кулешов"
-
-# Поиск по части имени
-python telegram_bot_client.py --searchContacts "Кулешов"
-
-# С лимитом (по умолчанию 20)
-python telegram_bot_client.py --searchContacts "марс и венера" --limit 5
+# With filtering profile
+python telegram_cli.py --search-messages "search query" --profile dialogue
 ```
 
 ### --list-chats
 
-Список последних диалогов с информацией о чате и последнем сообщении.
+List recent dialogs with chat info and last message.
 
 ```bash
-# Последние 100 диалогов (по умолчанию)
-python telegram_bot_client.py --list-chats
+# Last 100 dialogs (default)
+python telegram_cli.py --list-chats
 
-# Больше диалогов
-python telegram_bot_client.py --list-chats --limit 500
+# More dialogs
+python telegram_cli.py --list-chats --limit 500
 
-# С профилем
-python telegram_bot_client.py --list-chats --profile dialogue
+# With profile
+python telegram_cli.py --list-chats --profile dialogue
 ```
 
 ### --get-entities
 
-Полная информация о пользователях, чатах или каналах. Включает bio, фото, дату рождения, количество общих чатов.
+Full information about users, chats or channels. Includes bio, photo, birthday, common chats count.
 
 ```bash
-# По username
-python telegram_bot_client.py --get-entities mike_kuleshov
+# By username
+python telegram_cli.py --get-entities mike_kuleshov
 
-# По числовому ID
-python telegram_bot_client.py --get-entities 1744485600
+# By numeric ID
+python telegram_cli.py --get-entities 1744485600
 
-# Несколько сущностей
-python telegram_bot_client.py --get-entities mike_kuleshov Kuleshov 123456789
+# Multiple entities
+python telegram_cli.py --get-entities mike_kuleshov Kuleshov 123456789
 
-# С профилем
-python telegram_bot_client.py --get-entities mike_kuleshov --profile dialogue
+# With profile
+python telegram_cli.py --get-entities mike_kuleshov --profile dialogue
 ```
 
-### --sendMessage / --sendFiles
-
-Отправка текста и файлов в чат.
+### Sending Messages (--send-message / --send-files)
 
 ```bash
-# Текстовое сообщение
-python telegram_bot_client.py --chat mike_kuleshov --sendMessage "Привет!"
+# Text message
+python telegram_cli.py --chat 1744485600 --send-message "Hello!"
 
-# Файл
-python telegram_bot_client.py --chat mike_kuleshov --sendFiles photo.jpg
+# Single file
+python telegram_cli.py --chat 1744485600 --send-files photo.jpg
 
-# Несколько файлов
-python telegram_bot_client.py --chat mike_kuleshov --sendFiles photo1.jpg photo2.jpg video.mp4
+# Multiple files
+python telegram_cli.py --chat 1744485600 --send-files photo1.jpg photo2.jpg video.mp4
 
-# Файлы с подписью
-python telegram_bot_client.py --chat mike_kuleshov --sendFiles doc.pdf --sendMessage "Документ"
+# Files with caption
+python telegram_cli.py --chat 1744485600 --send-files doc.pdf --send-message "Document"
 
-# Ответ на сообщение
-python telegram_bot_client.py --chat mike_kuleshov --sendMessage "Спасибо!" --replyTo 12345
+# Reply to a message
+python telegram_cli.py --chat 1744485600 --send-message "Thanks!" --reply-to 12345
 
-# Файл как ответ
-python telegram_bot_client.py --chat mike_kuleshov --sendFiles result.pdf --replyTo 12345
+# File as reply
+python telegram_cli.py --chat 1744485600 --send-files result.pdf --reply-to 12345
 ```
 
-### --forwardMessage
+### --forward-message
 
-Пересылка сообщения из одного чата в другой.
+Forward a message from one chat to another.
 
 ```bash
-# Переслать сообщение 123 из чата A в чат B
-python telegram_bot_client.py --chat -1001605174968 --messageId 123 --forwardMessage --targetChat 1744485600
+# Forward message 123 from chat A to chat B
+python telegram_cli.py --chat -1001605174968 --message-id 123 --forward-message --target-chat 1744485600
 
-# По числовым ID
-python telegram_bot_client.py --chat -1001234567890 --messageId 456 --forwardMessage --targetChat -1009876543210
+# By numeric IDs
+python telegram_cli.py --chat -1001234567890 --message-id 456 --forward-message --target-chat -1009876543210
 ```
 
-### --replyMessage
+### --reply-message
 
-Ответ на сообщение. Без `--targetChat` — отвечает в том же чате. С `--targetChat` — кросс-чат ответ.
+Reply to a message. Without `--target-chat` — replies in the same chat. With `--target-chat` — cross-chat reply.
 
 ```bash
-# Ответ в том же чате
-python telegram_bot_client.py --chat mike_kuleshov --messageId 123 --replyMessage "Ответ"
+# Reply in the same chat
+python telegram_cli.py --chat 1744485600 --message-id 123 --reply-message "Reply text"
 
-# Кросс-чат ответ (ответить в другом чате на сообщение из --chat)
-python telegram_bot_client.py --chat -1001605174968 --messageId 123 --replyMessage "Смотри это" --targetChat 1744485600
+# Cross-chat reply (reply in another chat referencing a message from --chat)
+python telegram_cli.py --chat -1001605174968 --message-id 123 --reply-message "Check this" --target-chat 1744485600
 ```
 
-### --editMessage
+### --edit-message
 
-Редактирование своего сообщения.
+Edit your own message.
 
 ```bash
-# Заменить текст сообщения
-python telegram_bot_client.py --chat mike_kuleshov --messageId 123 --editMessage "Исправленный текст"
+python telegram_cli.py --chat 1744485600 --message-id 123 --edit-message "Corrected text"
 ```
 
-### --addReaction
+### --add-reaction
 
-Добавление реакции (эмодзи) на сообщение.
+Add an emoji reaction to a message.
 
 ```bash
-# Поставить огонь
-python telegram_bot_client.py --chat mike_kuleshov --messageId 123 --addReaction "🔥"
-
-# Поставить лайк
-python telegram_bot_client.py --chat mike_kuleshov --messageId 123 --addReaction "👍"
+python telegram_cli.py --chat 1744485600 --message-id 123 --add-reaction "🔥"
+python telegram_cli.py --chat 1744485600 --message-id 123 --add-reaction "👍"
 ```
 
-### --clickButton
+### --click-button
 
-Нажатие инлайн-кнопки на сообщении.
+Click an inline button on a message.
 
 ```bash
-# Нажать кнопку с текстом
-python telegram_bot_client.py --chat mike_kuleshov --messageId 123 --clickButton "Подтвердить"
+python telegram_cli.py --chat 1744485600 --message-id 123 --click-button "Confirm"
 ```
 
 ### --download
 
-Скачивание файла из сообщения (фото, видео, документ, голосовое). Сохраняет в текущую директорию.
+Download a file from a message (photo, video, document, voice). Saves to the current directory.
 
 ```bash
-# Скачать вложение
-python telegram_bot_client.py --chat mike_kuleshov --messageId 123 --download
-
-# Скачать голосовое из личного чата
-python telegram_bot_client.py --chat 1744485600 --messageId 211175 --download
+python telegram_cli.py --chat 1744485600 --message-id 211175 --download
 ```
 
-## Фильтры сообщений
+### Message Filters
 
-Работают с `--chat` и `--listen*`:
+Filters work with `--chat` for reading messages:
 
-| Фильтр | Описание |
+| Filter | Description |
 |---|---|
-| `--incoming-only` | Только входящие |
-| `--outgoing-only` | Только исходящие |
-| `--from-user <id>` | От конкретного пользователя |
-| `--pattern <regex>` | По регулярному выражению |
-| `--has-media` | Только с медиа |
-| `--forwarded-only` | Только пересланные |
-| `--replies-only` | Только ответы |
-| `--has-reactions` | Только с реакциями |
+| `--incoming-only` | Incoming messages only |
+| `--outgoing-only` | Outgoing messages only |
+| `--from-user <id>` | From a specific user |
+| `--pattern <regex>` | Match text by regex |
+| `--has-media` | Messages with media only |
+| `--forwarded-only` | Forwarded messages only |
+| `--replies-only` | Replies only |
+| `--has-reactions` | Messages with reactions only |
 
-## Профили фильтрации
+### Filtering Profiles
 
-`--profile <name>` применяет профиль из `profiles.json` для очистки JSON. Удаляет ненужные ключи и типы объектов:
+`--profile <name>` applies a profile from `profiles.json` to clean JSON output. Removes unwanted keys and object types:
 
 ```json
 {
@@ -334,45 +300,230 @@ python telegram_bot_client.py --chat 1744485600 --messageId 211175 --download
 }
 ```
 
-## Бот-режим
+## telegram_listen.py
 
-Для работы как бот (обработка CallbackQuery). Сессия не требуется.
+Real-time message listener. Outputs each new, edited or deleted message as JSON. Press Ctrl+C to stop.
+
+Output goes through adapters (stdout by default). Configure adapters in `config.yaml`.
+
+### --listen
+
+Listen to a specific chat.
 
 ```bash
-# Бот слушает все чаты (--listen-all включается автоматически если не указано другое действие)
-python telegram_bot_client.py --botToken "123456:ABC-DEF..."
+# By username
+python telegram_listen.py --listen mike_kuleshov
 
-# Бот слушает конкретный чат
-python telegram_bot_client.py --botToken "123456:ABC-DEF..." --listen -1001605174968
+# By numeric ID
+python telegram_listen.py --listen -1001605174968
 
-# Бот слушает только личные сообщения
-python telegram_bot_client.py --botToken "123456:ABC-DEF..." --listen-private
+# With filtering profile
+python telegram_listen.py --listen mike_kuleshov --profile dialogue
+
+# Only incoming messages with media
+python telegram_listen.py --listen mike_kuleshov --incoming-only --has-media
 ```
 
-## Адаптеры вывода
+### --listen-private
 
-Настраиваются в `config.yaml`. Если секция `adapters` отсутствует — используется stdout по умолчанию. Закомментированный адаптер — выключен.
+Listen to all incoming private messages.
+
+```bash
+python telegram_listen.py --listen-private
+
+# With pattern filter
+python telegram_listen.py --listen-private --pattern "urgent"
+```
+
+### --listen-all
+
+Listen to all messages from every chat and channel.
+
+```bash
+python telegram_listen.py --listen-all
+
+# With profile
+python telegram_listen.py --listen-all --profile dialogue
+```
+
+### Events Handled
+
+- **NewMessage** — new messages
+- **MessageEdited** — edited messages
+- **MessageDeleted** — deleted messages (only IDs, no content)
+- **CallbackQuery** — inline button presses (bot mode only)
+
+### Output Adapters
+
+Configured in `config.yaml`. If `adapters` section is missing, stdout is used by default. Commented-out adapters are disabled.
 
 ```yaml
 adapters:
   - type: stdout
-    pretty: true          # форматированный JSON (по умолчанию true)
+    pretty: true              # formatted JSON (default true)
 
   - type: http
     url: "https://example.com/webhook"
-    method: POST          # по умолчанию POST
+    method: POST              # default POST
     headers:
       Authorization: "Bearer token"
-    timeout: 10           # секунды, по умолчанию 10
+    timeout: 10               # seconds, default 10
 
   - type: mongodb
     uri: "mongodb://user:pass@mongo:27017"
     database: "telegram"
-    collection: "messages" # по умолчанию "messages"
+    collection: "messages"    # default "messages"
 
   - type: rabbitmq
-    url: "amqp://guest:guest@localhost/"  # по умолчанию localhost
-    routing_key: "telegram"               # по умолчанию "telegram"
+    url: "amqp://guest:guest@localhost/"   # default localhost
+    routing_key: "telegram"                # default "telegram"
 ```
 
-Адаптеры работают параллельно — сообщение отправляется во все активные адаптеры одновременно.
+Adapters run in parallel — each message is sent to all active adapters simultaneously.
+
+## telegram_api.py
+
+REST API server built with FastAPI. Auto-generated Swagger docs at `http://localhost:8000/docs`.
+
+```bash
+python telegram_api.py
+# or
+uvicorn telegram_api:app --host 0.0.0.0 --port 8000
+```
+
+### Endpoints
+
+| Method | URL | Description | Parameters |
+|--------|-----|-------------|------------|
+| GET | `/messages/{chat_id}` | Read messages | query: fromId, toId, inclusive, forward, backward, limit, profile, filters |
+| POST | `/messages/{chat_id}` | Send message | body: `{text, replyTo}` |
+| PUT | `/messages/{chat_id}/{message_id}` | Edit message | body: `{text}` |
+| POST | `/messages/{chat_id}/{message_id}/forward` | Forward message | body: `{targetChat}` |
+| POST | `/messages/{chat_id}/{message_id}/reaction` | Add reaction | body: `{emoji}` |
+| POST | `/messages/{chat_id}/{message_id}/click` | Click button | body: `{buttonText}` |
+| GET | `/messages/{chat_id}/{message_id}/download` | Download file | returns file |
+| GET | `/search/messages` | Search messages | query: q, limit, profile |
+| GET | `/search/contacts` | Search contacts | query: q, limit, profile |
+| GET | `/chats` | List chats | query: limit, profile |
+| GET | `/entities/{id}` | Entity info | query: profile |
+
+### Examples
+
+```bash
+curl 'http://localhost:8000/chats?limit=5'
+curl 'http://localhost:8000/search/contacts?q=Кулешов&limit=3'
+curl 'http://localhost:8000/messages/1744485600?limit=10&has_media=true'
+curl 'http://localhost:8000/entities/mike_kuleshov'
+curl -X POST http://localhost:8000/messages/1744485600 \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "Hello!"}'
+curl -X PUT http://localhost:8000/messages/1744485600/12345 \
+  -H 'Content-Type: application/json' \
+  -d '{"text": "Edited text"}'
+curl -X POST http://localhost:8000/messages/1744485600/12345/reaction \
+  -H 'Content-Type: application/json' \
+  -d '{"emoji": "🔥"}'
+```
+
+## Bot Mode
+
+No session required. Works with both `telegram_listen.py` and `telegram_cli.py`.
+
+```bash
+# Bot listens to all chats (--listen-all is automatic when no listen mode specified)
+python telegram_listen.py --bot-token "123456:ABC-DEF..."
+
+# Bot listens to a specific chat
+python telegram_listen.py --bot-token "123456:ABC-DEF..." --listen -1001605174968
+
+# Bot listens to private messages only
+python telegram_listen.py --bot-token "123456:ABC-DEF..." --listen-private
+
+# Send a message as bot
+python telegram_cli.py --bot-token "123456:ABC-DEF..." --chat 123 --send-message "test"
+```
+
+In bot mode, `CallbackQuery` events (inline button presses) are also handled.
+
+## telegram_mcp.py
+
+MCP server exposing all Telegram commands as tools. Works with any MCP-compatible client (Claude Code, Claude Desktop, Cursor, etc.).
+
+### Configuration
+
+Reads credentials from `config.yaml` or environment variables:
+
+| config.yaml | env |
+|-------------|-----|
+| `telegram.api_id` | `TELEGRAM_API_ID` |
+| `telegram.api_hash` | `TELEGRAM_API_HASH` |
+| `telegram.session_string` | `TELEGRAM_SESSION` |
+
+### Local setup (Claude Code)
+
+```bash
+pip install mcp
+
+claude mcp add -s user \
+  -e TELEGRAM_API_ID=12345678 \
+  -e TELEGRAM_API_HASH=a1b2c3d4... \
+  -e TELEGRAM_SESSION=1ApW... \
+  telegram -- python /path/to/telegram_mcp.py
+```
+
+Or add manually to `~/.claude.json`:
+
+```json
+{
+  "mcpServers": {
+    "telegram": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["telegram_mcp.py"],
+      "env": {
+        "TELEGRAM_API_ID": "12345678",
+        "TELEGRAM_API_HASH": "a1b2c3d4...",
+        "TELEGRAM_SESSION": "1ApW..."
+      }
+    }
+  }
+}
+```
+
+If `config.yaml` exists in the working directory, env variables are not needed.
+
+### Remote setup (via git)
+
+```json
+{
+  "mcpServers": {
+    "telegram": {
+      "command": "uvx",
+      "args": ["--from", "git+https://github.com/mainpart/telegram-bot-client", "telegram_mcp"],
+      "env": {
+        "TELEGRAM_API_ID": "12345678",
+        "TELEGRAM_API_HASH": "a1b2c3d4...",
+        "TELEGRAM_SESSION": "1ApW..."
+      }
+    }
+  }
+}
+```
+
+`uvx` caches the package — no re-download on subsequent runs.
+
+### Available tools
+
+| Tool | Description |
+|------|-------------|
+| `get_messages` | Read messages from a chat (with filters) |
+| `tg_send_message` | Send a text message |
+| `tg_edit_message` | Edit a message |
+| `tg_forward_message` | Forward a message |
+| `tg_add_reaction` | Add emoji reaction |
+| `tg_click_button` | Click inline button |
+| `tg_download_file` | Download file from message |
+| `tg_search_messages` | Search message text across chats |
+| `tg_search_contacts` | Search contacts by name |
+| `tg_list_chats` | List recent chats |
+| `tg_get_entities` | Get user/chat info |

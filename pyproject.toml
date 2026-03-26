@@ -1,0 +1,8 @@
+[project]
+name = "telegram-mcp"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = ["telethon>=1.28", "PyYAML>=6.0", "mcp>=1.7"]
+
+[project.scripts]
+telegram_mcp = "telegram_mcp:main"

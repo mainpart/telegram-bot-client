@@ -10,7 +10,7 @@ from telethon.tl.functions.messages import GetFullChatRequest
 from tg.core import logger, apply_message_filters, cleanup_json
 
 async def get_updates(client, chat, args):
-    from_id = getattr(args, 'fromId', None)
+    from_id = getattr(args, 'from_id', None)
     limit = getattr(args, 'limit', None)
 
     if limit is None:
@@ -26,13 +26,13 @@ async def get_updates(client, chat, args):
             kwargs['limit'] = limit_effective
 
         direction = None
-        to_id = getattr(args, 'toId', None)
+        to_id = getattr(args, 'to_id', None)
         if from_id is not None and to_id is not None and from_id != to_id:
             inferred = 'forward' if to_id > from_id else 'backward'
             if args.forward and inferred == 'backward':
-                logger.warning("Direction overridden by range: using backward due to --fromId/--toId order.")
+                logger.warning("Direction overridden by range: using backward due to --from_id/--to_id order.")
             if args.backward and inferred == 'forward':
-                logger.warning("Direction overridden by range: using forward due to --fromId/--toId order.")
+                logger.warning("Direction overridden by range: using forward due to --from_id/--to_id order.")
             direction = inferred
         else:
             if args.forward:

@@ -1,6 +1,9 @@
 telethon>=1.28.0
 PyYAML>=6.0
 
+# Optional MCP server:
+# mcp>=1.7            # for telegram_mcp.py
+
 # Optional API server:
 # fastapi>=0.110     # for telegram_api.py
 # uvicorn>=0.29      # for telegram_api.py

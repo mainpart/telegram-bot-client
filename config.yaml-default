@@ -8,18 +8,15 @@ telegram:
 # Доступные типы: stdout, http, mongodb
 adapters:
   - type: stdout
-
     pretty: true
-  # - type: http
-  #   enabled: true
-  #   url: "https://example.com/webhook"
-  #   method: POST
-  #   headers:
-  #     Authorization: "Bearer token"
-  #   timeout: 10
-  # - type: mongodb
-  #   enabled: true
-  #   uri: "mongodb://user:pass@mongo:27017"
-  #   database: "telegram"
-  #   collection: "messages"
+# - type: http
+#   url: "https://example.com/webhook"
+#   method: POST
+#   headers:
+#     Authorization: "Bearer token"
+#   timeout: 10
+# - type: mongodb
+#   uri: "mongodb://user:pass@mongo:27017"
+#   database: "telegram"
+#   collection: "messages"
 

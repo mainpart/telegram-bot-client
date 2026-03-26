@@ -149,14 +149,14 @@ def cleanup_json(obj, profile_name="default"):
 def connect_client(yaml_cfg, bot_token=None, session_string=None):
     """Create a TelegramClient from config. Returns (client, api_id, api_hash, telegram_cfg)."""
     telegram_cfg = (yaml_cfg or {}).get('telegram') or {}
-    api_hash = telegram_cfg.get('api_hash')
+    api_hash = telegram_cfg.get('api_hash') or os.environ.get('TELEGRAM_API_HASH')
     try:
-        api_id = int(telegram_cfg.get('api_id'))
+        api_id = int(telegram_cfg.get('api_id') or os.environ.get('TELEGRAM_API_ID'))
     except (TypeError, ValueError):
-        logger.error("api_id not set or invalid in config.yaml")
+        logger.error("api_id not set or invalid")
         return None
     if not api_hash:
-        logger.error("api_hash not set in config.yaml")
+        logger.error("api_hash not set")
         return None
 
     if bot_token:
@@ -164,7 +164,7 @@ def connect_client(yaml_cfg, bot_token=None, session_string=None):
     elif session_string:
         client = TelegramClient(StringSession(session_string), api_id, api_hash)
     else:
-        ss = os.environ.get('TELEGRAM_SESSION') or telegram_cfg.get('session_string')
+        ss = telegram_cfg.get('session_string') or os.environ.get('TELEGRAM_SESSION')
         if not ss:
             logger.error("Session not set. Use telegram_cli.py --init to generate a token.")
             return None
@@ -186,7 +186,7 @@ async def start_client(client, bot_token=None):
 
 def add_common_args(parser):
     parser.add_argument('--profile', type=str, default='default', help='Filtering profile from profiles.json.')
-    parser.add_argument('--botToken', type=str, help='Bot token for bot mode.')
+    parser.add_argument('--bot-token', type=str, help='Bot token for bot mode.')
     parser.add_argument('--limit', type=int, help='Number of items to fetch.')
     parser.add_argument('--incoming-only', action='store_true', help='Filter only incoming messages.')
     parser.add_argument('--outgoing-only', action='store_true', help='Filter only outgoing messages.')

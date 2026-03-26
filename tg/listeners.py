@@ -71,7 +71,7 @@ async def listen_chat(client, chat_entity, args):
     client.add_event_handler(lambda event: message_event_handler(event, args), events.NewMessage(chats=chat_entity))
     client.add_event_handler(lambda event: message_event_handler(event, args), events.MessageEdited(chats=chat_entity))
     client.add_event_handler(lambda event: message_deleted_handler(event, args), events.MessageDeleted(chats=chat_entity))
-    if args.botToken:
+    if args.bot_token:
         client.add_event_handler(lambda event: callback_query_handler(event, args), CallbackQuery(chats=chat_entity))
     await client.run_until_disconnected()
 
@@ -89,7 +89,7 @@ async def listen_private(client, args):
         lambda event: message_deleted_handler(event, args),
         events.MessageDeleted()
     )
-    if args.botToken:
+    if args.bot_token:
         client.add_event_handler(
             lambda event: callback_query_handler(event, args),
             CallbackQuery(func=lambda e: e.is_private)
@@ -110,7 +110,7 @@ async def listen_all(client, args):
         lambda event: message_deleted_handler(event, args),
         events.MessageDeleted()
     )
-    if args.botToken:
+    if args.bot_token:
         client.add_event_handler(
             lambda event: callback_query_handler(event, args),
             CallbackQuery()
