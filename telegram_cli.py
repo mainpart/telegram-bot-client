@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 import logging
 import yaml
@@ -102,14 +103,17 @@ async def main():
 
         await init_adapters_from_config(yaml_cfg)
 
+        def output(data):
+            print(json.dumps(data, indent=2, ensure_ascii=False))
+
         if args.list_chats:
-            await list_chats(client, args)
+            output(await list_chats(client, args.limit, args.profile))
         elif args.searchMessages:
-            await search_messages(client, args.searchMessages, args)
+            output(await search_messages(client, args.searchMessages, args.limit, args.profile))
         elif args.searchContacts:
-            await search_contacts(client, args.searchContacts, args)
+            output(await search_contacts(client, args.searchContacts, args.limit, args.profile))
         elif args.get_entities:
-            await get_entities(client, args.get_entities, args)
+            output(await get_entities(client, args.get_entities, args.profile))
         elif args.forwardMessage:
             if not (chat_entity and target_chat_entity and args.messageId):
                 logger.error("--forwardMessage requires --chat, --messageId and --targetChat.")
@@ -140,7 +144,9 @@ async def main():
             if not chat_entity or not args.messageId:
                 logger.error("--chat and --messageId are required for --download.")
                 return
-            await download_file(client, chat_entity, args.messageId)
+            path = await download_file(client, chat_entity, args.messageId)
+            if path:
+                print(f"File downloaded to: {path}")
         elif args.addReaction:
             if not chat_entity or not args.messageId:
                 logger.error("--chat and --messageId are required for --addReaction.")
@@ -155,7 +161,7 @@ async def main():
             if not chat_entity:
                 logger.error("A --chat must be provided to fetch updates.")
                 return
-            await get_updates(client, chat_entity, args.fromId, args.limit, args)
+            output(await get_updates(client, chat_entity, args))
 
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
