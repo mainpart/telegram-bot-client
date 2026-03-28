@@ -1,9 +1,44 @@
 import asyncio
 import json
 import os
-from telethon.tl.functions.messages import SearchGlobalRequest
+import re
+from datetime import datetime
+from telethon.tl.functions.messages import SearchGlobalRequest, SearchRequest as MessagesSearchRequest
 from telethon.tl.functions.contacts import SearchRequest as ContactsSearchRequest
-from telethon.tl.types import InputPeerEmpty, InputMessagesFilterEmpty
+from telethon.tl.types import (
+    InputPeerEmpty, InputMessagesFilterEmpty,
+    InputMessagesFilterPhotos, InputMessagesFilterVideo,
+    InputMessagesFilterDocument, InputMessagesFilterUrl,
+    InputMessagesFilterVoice, InputMessagesFilterGif,
+    InputMessagesFilterMusic, InputMessagesFilterRoundVideo,
+    InputMessagesFilterMyMentions, InputMessagesFilterPinned,
+)
+
+MEDIA_FILTERS = {
+    'photo': InputMessagesFilterPhotos,
+    'video': InputMessagesFilterVideo,
+    'document': InputMessagesFilterDocument,
+    'url': InputMessagesFilterUrl,
+    'voice': InputMessagesFilterVoice,
+    'gif': InputMessagesFilterGif,
+    'music': InputMessagesFilterMusic,
+    'round_video': InputMessagesFilterRoundVideo,
+    'mentions': InputMessagesFilterMyMentions,
+    'pinned': InputMessagesFilterPinned,
+}
+
+def _parse_filter(filter_name):
+    if not filter_name:
+        return InputMessagesFilterEmpty()
+    cls = MEDIA_FILTERS.get(filter_name)
+    if not cls:
+        raise ValueError(f"Unknown filter: {filter_name}. Available: {', '.join(MEDIA_FILTERS.keys())}")
+    return cls()
+
+def _parse_date(date_str):
+    if not date_str:
+        return None
+    return datetime.fromisoformat(date_str)
 from telethon.tl.functions.users import GetFullUserRequest
 from telethon.tl.functions.channels import GetFullChannelRequest
 from telethon.tl.functions.messages import GetFullChatRequest
@@ -78,9 +113,13 @@ async def get_updates(client, chat, args):
 
 async def send_message(client, chat, text=None, files=None, reply_to=None):
     if files:
-        valid_files = [f for f in files if os.path.exists(f)]
+        valid_files = []
         for f in files:
-            if not os.path.exists(f):
+            if re.match(r'https?://', f):
+                valid_files.append(f)
+            elif os.path.exists(f):
+                valid_files.append(f)
+            else:
                 logger.error(f"File not found: {f}")
         if not valid_files:
             logger.error("No valid files found to send.")
@@ -94,6 +133,10 @@ async def send_message(client, chat, text=None, files=None, reply_to=None):
             logger.error("No text or files provided to send.")
             return
         await client.send_message(chat, text, reply_to=reply_to)
+
+async def delete_message(client, chat, message_id):
+    entity = await client.get_entity(chat)
+    await client.delete_messages(entity, [message_id])
 
 async def add_reaction(client, chat, message_id, reaction):
     from telethon.tl.functions.messages import SendReactionRequest
@@ -196,13 +239,16 @@ async def list_chats(client, limit=100, profile="default"):
         logger.error(f"An error occurred while listing chats: {e}")
         return []
 
-async def search_messages(client, query, limit=100, profile="default"):
+async def search_messages(client, query, limit=100, filter=None, min_date=None, max_date=None,
+                          groups_only=False, users_only=False, broadcasts_only=False, profile="default"):
     try:
         results = await client(SearchGlobalRequest(
             q=query, limit=limit,
-            filter=InputMessagesFilterEmpty(),
-            min_date=None, max_date=None,
-            offset_rate=0, offset_peer=InputPeerEmpty(), offset_id=0
+            filter=_parse_filter(filter),
+            min_date=_parse_date(min_date), max_date=_parse_date(max_date),
+            offset_rate=0, offset_peer=InputPeerEmpty(), offset_id=0,
+            groups_only=groups_only or None, users_only=users_only or None,
+            broadcasts_only=broadcasts_only or None,
         ))
         entities = {entity.id: entity for entity in results.chats + results.users}
         grouped = {}
@@ -228,7 +274,7 @@ async def search_messages(client, query, limit=100, profile="default"):
         logger.error(f"An error occurred during search: {e}")
         return {}
 
-async def search_contacts(client, query, limit=20, profile="default"):
+async def search(client, query, limit=20, profile="default"):
     try:
         result = await client(ContactsSearchRequest(q=query, limit=limit))
         output = []
@@ -244,7 +290,31 @@ async def search_contacts(client, query, limit=20, profile="default"):
                 output.append(cleaned)
         return output
     except Exception as e:
-        logger.error(f"An error occurred during contact search: {e}")
+        logger.error(f"An error occurred during search: {e}")
+        return []
+
+async def search_chat(client, chat, query, limit=100, filter=None, from_user=None,
+                       min_date=None, max_date=None, profile="default"):
+    try:
+        entity = await client.get_entity(chat)
+        from_id = None
+        if from_user:
+            from_id = await client.get_input_entity(int(from_user) if from_user.isdigit() else from_user)
+        results = await client(MessagesSearchRequest(
+            peer=entity, q=query, limit=limit,
+            filter=_parse_filter(filter),
+            min_date=_parse_date(min_date), max_date=_parse_date(max_date),
+            offset_id=0, add_offset=0, max_id=0, min_id=0, hash=0,
+            from_id=from_id,
+        ))
+        output = []
+        for message in results.messages:
+            cleaned = cleanup_json(json.loads(message.to_json()), profile)
+            if cleaned:
+                output.append(cleaned)
+        return output
+    except Exception as e:
+        logger.error(f"An error occurred during chat search: {e}")
         return []
 
 async def get_entities(client, identifiers, profile="default"):

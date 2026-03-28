@@ -5,7 +5,7 @@ from tg.core import (
 )
 from tg.commands import (
     get_updates, send_message, add_reaction, forward_message,
-    send_cross_chat_reply, edit_message, click_button, download_file,
-    list_chats, search_messages, search_contacts, get_entities,
+    send_cross_chat_reply, edit_message, click_button, delete_message, download_file,
+    list_chats, search_messages, search, search_chat, get_entities,
 )
 from tg.listeners import listen_chat, listen_private, listen_all

@@ -10,8 +10,8 @@ from tg import (
     logger, load_yaml_config, load_profiles,
     connect_client, start_client, add_common_args, parse_chat_id,
     get_updates, send_message, add_reaction, forward_message,
-    send_cross_chat_reply, edit_message, click_button, download_file,
-    list_chats, search_messages, search_contacts, get_entities,
+    send_cross_chat_reply, edit_message, click_button, delete_message, download_file,
+    list_chats, search_messages, search, search_chat, get_entities,
 )
 import argparse
 import os
@@ -23,7 +23,8 @@ async def main():
     group.add_argument('--init', action='store_true', help='Login and generate StringSession token.')
     group.add_argument('--list-chats', action='store_true', help='List recent chats.')
     group.add_argument('--search-messages', type=str, help='Search message text across all chats.')
-    group.add_argument('--search-contacts', type=str, help='Search contacts/users by name or username.')
+    group.add_argument('--search-contacts', type=str, help='Search users, groups, channels by name or username.')
+    group.add_argument('--search-chat', type=str, help='Search messages within a specific chat (requires --chat).')
 
     parser.add_argument('--chat', type=str, help='Chat username or ID.')
     parser.add_argument('--from-id', type=int, help='Start message ID.')
@@ -42,7 +43,14 @@ async def main():
     parser.add_argument('--download', action='store_true', help='Download file from message.')
     parser.add_argument('--add-reaction', type=str, help='Add reaction emoji.')
     parser.add_argument('--edit-message', type=str, help='New text for message.')
+    parser.add_argument('--delete-message', action='store_true', help='Delete a message. Requires --chat and --message-id.')
     parser.add_argument('--get-entities', nargs='+', help='Get info for users/chats by ID or username.')
+    parser.add_argument('--filter', type=str, help='Media type filter: photo, video, document, url, voice, gif, music, round_video, mentions, pinned.')
+    parser.add_argument('--min-date', type=str, help='Min date in ISO format (e.g. 2026-01-01).')
+    parser.add_argument('--max-date', type=str, help='Max date in ISO format.')
+    parser.add_argument('--groups-only', action='store_true', help='Search in groups only.')
+    parser.add_argument('--users-only', action='store_true', help='Search in private chats only.')
+    parser.add_argument('--broadcasts-only', action='store_true', help='Search in channels only.')
     add_common_args(parser)
     args = parser.parse_args()
 
@@ -107,9 +115,19 @@ async def main():
         if args.list_chats:
             output(await list_chats(client, args.limit, args.profile))
         elif args.search_messages:
-            output(await search_messages(client, args.search_messages, args.limit, args.profile))
+            output(await search_messages(client, args.search_messages, args.limit,
+                filter=args.filter, min_date=args.min_date, max_date=args.max_date,
+                groups_only=args.groups_only, users_only=args.users_only,
+                broadcasts_only=args.broadcasts_only, profile=args.profile))
         elif args.search_contacts:
-            output(await search_contacts(client, args.search_contacts, args.limit, args.profile))
+            output(await search(client, args.search_contacts, args.limit, args.profile))
+        elif args.search_chat:
+            if not chat_entity:
+                logger.error("--chat is required for --search-chat.")
+                return
+            output(await search_chat(client, chat_entity, args.search_chat, args.limit,
+                filter=args.filter, from_user=getattr(args, 'from_user', None),
+                min_date=args.min_date, max_date=args.max_date, profile=args.profile))
         elif args.get_entities:
             output(await get_entities(client, args.get_entities, args.profile))
         elif args.forward_message:
@@ -155,6 +173,11 @@ async def main():
                 logger.error("--chat and --message-id are required for --edit-message.")
                 return
             await edit_message(client, chat_entity, args.message_id, args.edit_message)
+        elif args.delete_message:
+            if not chat_entity or not args.message_id:
+                logger.error("--chat and --message-id are required for --delete-message.")
+                return
+            await delete_message(client, chat_entity, args.message_id)
         else:
             if not chat_entity:
                 logger.error("A --chat must be provided to fetch updates.")

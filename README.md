@@ -20,6 +20,12 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
+To run without activating the venv:
+
+```bash
+.venv/bin/python telegram_cli.py --list-chats
+```
+
 Optional dependencies (install as needed):
 
 ```bash
@@ -132,7 +138,7 @@ python telegram_cli.py --chat mike_kuleshov --outgoing-only
 
 #### --search-contacts
 
-Search contacts, users, channels and groups by name or username. Uses Telegram's `contacts.Search` API.
+Search users, groups, channels by name or username. Uses Telegram's `contacts.Search` API.
 
 ```bash
 # Search by name
@@ -156,8 +162,38 @@ python telegram_cli.py --search-messages "search query"
 # With limit (default 100)
 python telegram_cli.py --search-messages "search query" --limit 50
 
+# Only in groups
+python telegram_cli.py --search-messages "search query" --groups-only
+
+# Only in channels
+python telegram_cli.py --search-messages "search query" --broadcasts-only
+
+# Only photos
+python telegram_cli.py --search-messages "search query" --filter photo
+
+# Date range
+python telegram_cli.py --search-messages "search query" --min-date 2026-01-01 --max-date 2026-03-01
+
 # With filtering profile
 python telegram_cli.py --search-messages "search query" --profile dialogue
+```
+
+#### --search-chat
+
+Search messages within a specific chat (server-side). Faster than `--pattern` which filters locally.
+
+```bash
+# Search in a specific chat
+python telegram_cli.py --search-chat "FAR manager" --chat -5241856808
+
+# With media filter
+python telegram_cli.py --search-chat "photo" --chat 1744485600 --filter photo
+
+# From a specific user
+python telegram_cli.py --search-chat "test" --chat -1001605174968 --from-user 809799943
+
+# Date range
+python telegram_cli.py --search-chat "test" --chat 1744485600 --min-date 2026-03-01
 ```
 
 ### --list-chats
@@ -245,6 +281,14 @@ Edit your own message.
 
 ```bash
 python telegram_cli.py --chat 1744485600 --message-id 123 --edit-message "Corrected text"
+```
+
+### --delete-message
+
+Delete a message. Only works for your own messages or in chats where you have delete permissions.
+
+```bash
+python telegram_cli.py --chat 1744485600 --message-id 123 --delete-message
 ```
 
 ### --add-reaction
@@ -516,14 +560,15 @@ If `config.yaml` exists in the working directory, env variables are not needed.
 
 | Tool | Description |
 |------|-------------|
-| `get_messages` | Read messages from a chat (with filters) |
-| `tg_send_message` | Send a text message |
+| `tg_get_messages` | Read messages from a chat (with filters) |
+| `tg_send_message` | Send a message with text, files (local paths or URLs), or both |
 | `tg_edit_message` | Edit a message |
+| `tg_delete_message` | Delete a message |
 | `tg_forward_message` | Forward a message |
 | `tg_add_reaction` | Add emoji reaction |
-| `tg_click_button` | Click inline button |
 | `tg_download_file` | Download file from message |
-| `tg_search_messages` | Search message text across chats |
-| `tg_search_contacts` | Search contacts by name |
+| `tg_search_messages` | Search message text across all chats (with filters: media type, date range, chat type) |
+| `tg_search_chat` | Search messages within a specific chat (server-side, fast) |
+| `tg_search` | Search users, groups, and channels by name or username |
 | `tg_list_chats` | List recent chats |
 | `tg_get_entities` | Get user/chat info |
