@@ -27,7 +27,7 @@ jobs:
       id: meta
       uses: docker/metadata-action@v5
       with:
-        images: ${{ secrets.DOCKERHUB_USERNAME }}/telegram-bot-client
+        images: ${{ secrets.DOCKERHUB_USERNAME }}/telegram-client
         tags: |
           type=ref,event=branch
           type=sha,prefix={{branch}}-
@@ -40,6 +40,6 @@ jobs:
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/telegram-bot-client:latest
+        cache-from: type=registry,ref=${{ secrets.DOCKERHUB_USERNAME }}/telegram-client:latest
         cache-to: type=inline
 

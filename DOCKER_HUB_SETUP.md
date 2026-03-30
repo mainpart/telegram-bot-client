@@ -12,7 +12,7 @@
 
 ## Шаг 2: Настройка GitHub Secrets
 
-1. Откройте: https://github.com/mainpart/telegram-bot-client/settings/secrets/actions
+1. Откройте: https://github.com/mainpart/telegram-client/settings/secrets/actions
 2. Добавьте **Repository secrets**:
    
    **Первый секрет:**
@@ -33,9 +33,9 @@ git push origin main
 
 ## Шаг 4: Проверка
 
-1. Откройте: https://github.com/mainpart/telegram-bot-client/actions
+1. Откройте: https://github.com/mainpart/telegram-client/actions
 2. Вы увидите запущенный workflow "Build and Push Docker Image"
-3. После успешной сборки образ появится в Docker Hub: `https://hub.docker.com/r/ваш_логин/telegram-bot-client`
+3. После успешной сборки образ появится в Docker Hub: `https://hub.docker.com/r/ваш_логин/telegram-client`
 
 ## Использование в Kubernetes
 
@@ -45,22 +45,22 @@ git push origin main
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: telegram-bot-client
+  name: telegram-client
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: telegram-bot-client
+      app: telegram-client
   template:
     metadata:
       labels:
-        app: telegram-bot-client
+        app: telegram-client
     spec:
       containers:
-      - name: telegram-bot-client
-        image: ваш_логин_dockerhub/telegram-bot-client:latest
+      - name: telegram-client
+        image: ваш_логин_dockerhub/telegram-client:latest
         # или с конкретным тегом:
-        # image: ваш_логин_dockerhub/telegram-bot-client:main-abc1234
+        # image: ваш_логин_dockerhub/telegram-client:main-abc1234
         imagePullPolicy: Always
         env:
         - name: TELEGRAM_API_ID

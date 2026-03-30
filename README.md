@@ -350,45 +350,49 @@ Real-time message listener. Outputs each new, edited or deleted message as JSON.
 
 Output goes through adapters (stdout by default). Configure adapters in `config.yaml`.
 
-### --listen
-
-Listen to a specific chat.
+Without arguments, listens to all messages from every chat.
 
 ```bash
-# By username
-python telegram_listen.py --listen mike_kuleshov
+# Listen to everything
+python telegram_listen.py
 
-# By numeric ID
-python telegram_listen.py --listen -1001605174968
+# Specific chat
+python telegram_listen.py --chat 1744485600
+
+# Multiple chats
+python telegram_listen.py --chat 1744485600 --chat -1001605174968
+
+# Private messages only
+python telegram_listen.py --private-only
+
+# Only messages mentioning me
+python telegram_listen.py --mentioned-only
+
+# Incoming only with regex filter
+python telegram_listen.py --incoming-only --pattern "urgent"
+
+# Only incoming messages with media in a specific chat
+python telegram_listen.py --chat 1744485600 --incoming-only --has-media
 
 # With filtering profile
-python telegram_listen.py --listen mike_kuleshov --profile dialogue
-
-# Only incoming messages with media
-python telegram_listen.py --listen mike_kuleshov --incoming-only --has-media
+python telegram_listen.py --profile dialogue
 ```
 
-### --listen-private
+### Listener Filters
 
-Listen to all incoming private messages.
-
-```bash
-python telegram_listen.py --listen-private
-
-# With pattern filter
-python telegram_listen.py --listen-private --pattern "urgent"
-```
-
-### --listen-all
-
-Listen to all messages from every chat and channel.
-
-```bash
-python telegram_listen.py --listen-all
-
-# With profile
-python telegram_listen.py --listen-all --profile dialogue
-```
+| Filter | Description |
+|---|---|
+| `--chat <id>` | Specific chat (repeatable) |
+| `--private-only` | Private messages only |
+| `--mentioned-only` | Messages mentioning me |
+| `--incoming-only` | Incoming messages only |
+| `--outgoing-only` | Outgoing messages only |
+| `--from-user <id>` | From a specific user |
+| `--pattern <regex>` | Match text by regex |
+| `--has-media` | Messages with media only |
+| `--forwarded-only` | Forwarded messages only |
+| `--replies-only` | Replies only |
+| `--has-reactions` | Messages with reactions only |
 
 ### Events Handled
 
@@ -471,20 +475,28 @@ curl -X POST http://localhost:8000/messages/1744485600/12345/reaction \
 
 ## Bot Mode
 
-No session required. Works with both `telegram_listen.py` and `telegram_cli.py`.
+No session required. Uses `bot_token` from `config.yaml` or `TELEGRAM_BOT_TOKEN` env. Works with both `telegram_listen.py` and `telegram_cli.py`.
+
+```yaml
+# config.yaml
+telegram:
+  api_id: 12345678
+  api_hash: "a1b2c3d4..."
+  bot_token: "123456:ABC-DEF..."
+```
 
 ```bash
-# Bot listens to all chats (--listen-all is automatic when no listen mode specified)
-python telegram_listen.py --bot-token "123456:ABC-DEF..."
+# Bot listens to all chats
+python telegram_listen.py --bot
 
 # Bot listens to a specific chat
-python telegram_listen.py --bot-token "123456:ABC-DEF..." --listen -1001605174968
+python telegram_listen.py --bot --chat -1001605174968
 
 # Bot listens to private messages only
-python telegram_listen.py --bot-token "123456:ABC-DEF..." --listen-private
+python telegram_listen.py --bot --private-only
 
 # Send a message as bot
-python telegram_cli.py --bot-token "123456:ABC-DEF..." --chat 123 --send-message "test"
+python telegram_cli.py --bot --chat 123 --send-message "test"
 ```
 
 In bot mode, `CallbackQuery` events (inline button presses) are also handled.
@@ -502,6 +514,7 @@ Reads credentials from `config.yaml` or environment variables:
 | `telegram.api_id` | `TELEGRAM_API_ID` |
 | `telegram.api_hash` | `TELEGRAM_API_HASH` |
 | `telegram.session_string` | `TELEGRAM_SESSION` |
+| `telegram.bot_token` | `TELEGRAM_BOT_TOKEN` |
 
 ### Local setup (Claude Code)
 
@@ -543,7 +556,7 @@ If `config.yaml` exists in the working directory, env variables are not needed.
   "mcpServers": {
     "telegram": {
       "command": "uvx",
-      "args": ["--from", "git+https://github.com/mainpart/telegram-bot-client", "telegram_mcp"],
+      "args": ["--from", "git+https://github.com/mainpart/telegram-client", "telegram_mcp"],
       "env": {
         "TELEGRAM_API_ID": "12345678",
         "TELEGRAM_API_HASH": "a1b2c3d4...",
