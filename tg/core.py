@@ -70,25 +70,53 @@ async def init_adapters_from_config(cfg: dict):
 
 # --- Config ---
 
-def load_yaml_config(path: str = 'config.yaml') -> dict:
+CONFIG_DIR = None  # set by find_config / load_yaml_config
+
+def find_config(explicit_path=None):
+    """Find config.yaml by priority: explicit path > ./config.yaml > ~/.config/telegram-client/config.yaml."""
+    if explicit_path:
+        return explicit_path
+    if os.path.isfile('config.yaml'):
+        return 'config.yaml'
+    xdg = os.path.join(os.path.expanduser('~'), '.config', 'telegram-client', 'config.yaml')
+    if os.path.isfile(xdg):
+        return xdg
+    return None
+
+def load_yaml_config(path=None) -> dict:
+    global CONFIG_DIR
+    resolved = find_config(path)
+    if not resolved:
+        logger.warning("No config.yaml found. Using environment variables only.")
+        return {}
+    CONFIG_DIR = os.path.dirname(os.path.abspath(resolved))
     try:
-        with open(path, 'r') as f:
+        with open(resolved, 'r') as f:
             data = yaml.safe_load(f) or {}
             return data
     except FileNotFoundError:
-        logger.error(f"Config file '{path}' not found.")
+        logger.error(f"Config file '{resolved}' not found.")
     except Exception as e:
-        logger.error(f"Failed to read YAML config '{path}': {e}")
+        logger.error(f"Failed to read YAML config '{resolved}': {e}")
     return {}
 
 def load_profiles():
     global PROFILES
-    try:
-        with open('profiles.json', 'r') as f:
-            PROFILES = json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError) as e:
-        logger.warning(f"Could not load profiles.json: {e}. Using default empty filters.")
-        PROFILES = {}
+    candidates = []
+    if CONFIG_DIR:
+        candidates.append(os.path.join(CONFIG_DIR, 'profiles.json'))
+    candidates.append('profiles.json')
+    for path in candidates:
+        try:
+            with open(path, 'r') as f:
+                PROFILES = json.load(f)
+                return
+        except FileNotFoundError:
+            continue
+        except json.JSONDecodeError as e:
+            logger.warning(f"Invalid profiles.json at {path}: {e}")
+            continue
+    PROFILES = {}
 
 # --- Filters & Cleanup ---
 

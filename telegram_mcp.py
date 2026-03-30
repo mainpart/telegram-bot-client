@@ -16,7 +16,7 @@ async def get_client():
     global _client
     if _client is None:
         load_profiles()
-        yaml_cfg = load_yaml_config('config.yaml')
+        yaml_cfg = load_yaml_config()
         _client = connect_client(yaml_cfg)
         if not _client:
             raise RuntimeError("Failed to create Telegram client. Check api_id/api_hash/session.")

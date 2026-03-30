@@ -39,7 +39,7 @@ client = None
 async def lifespan(app: FastAPI):
     global client
     load_profiles()
-    yaml_cfg = load_yaml_config('config.yaml')
+    yaml_cfg = load_yaml_config()
     await init_adapters_from_config(yaml_cfg)
     client = connect_client(yaml_cfg)
     if not client:

@@ -9,7 +9,7 @@ from getpass import getpass
 from telethon import TelegramClient
 from telethon.sessions import StringSession
 from tg import (
-    logger, load_yaml_config, load_profiles,
+    logger, find_config, load_yaml_config, load_profiles,
     connect_client, start_client, resolve_bot_token, parse_chat_id,
     init_adapters_from_config, close_adapters, listen,
     get_updates, send_message, add_reaction, forward_message,
@@ -43,6 +43,7 @@ def _sub(subparsers, name, help, epilog=None):
 def build_parser():
     parser = argparse.ArgumentParser(prog='telegram-cli',
         description='Telegram CLI — one-shot commands and real-time listener')
+    parser.add_argument('--config', type=str, help='Path to config.yaml.')
     subparsers = parser.add_subparsers(dest='command')
 
     # init
@@ -236,20 +237,22 @@ async def async_main(argv=None):
         return
 
     logger.setLevel(logging.WARNING)
+
+    config_path = args.config
+    yaml_cfg = load_yaml_config(config_path)
     load_profiles()
 
     # init — special case, no client needed
     if args.command == 'init':
-        yaml_cfg = load_yaml_config('config.yaml')
         telegram_cfg = (yaml_cfg or {}).get('telegram') or {}
-        api_hash = telegram_cfg.get('api_hash')
+        api_hash = telegram_cfg.get('api_hash') or os.environ.get('TELEGRAM_API_HASH')
         try:
-            api_id = int(telegram_cfg.get('api_id'))
+            api_id = int(telegram_cfg.get('api_id') or os.environ.get('TELEGRAM_API_ID'))
         except (TypeError, ValueError):
-            logger.error("api_id not set or invalid in config.yaml")
+            logger.error("api_id not set in config or TELEGRAM_API_ID env.")
             return
         if not api_hash:
-            logger.error("api_hash not set in config.yaml")
+            logger.error("api_hash not set in config or TELEGRAM_API_HASH env.")
             return
         session = StringSession()
         client = TelegramClient(session, api_id, api_hash)
@@ -260,16 +263,17 @@ async def async_main(argv=None):
                 password=lambda: getpass('Enter your 2FA password: ')
             )
             token = StringSession.save(client.session)
+            save_path = find_config(config_path) or 'config.yaml'
             yaml_cfg.setdefault('telegram', {})['session_string'] = token
-            with open('config.yaml', 'w') as f:
+            os.makedirs(os.path.dirname(os.path.abspath(save_path)), exist_ok=True)
+            with open(save_path, 'w') as f:
                 yaml.dump(yaml_cfg, f, default_flow_style=False, allow_unicode=True)
-            print("Session saved to config.yaml")
+            print(f"Session saved to {save_path}")
         finally:
             await client.disconnect()
         return
 
     # all other commands need a client
-    yaml_cfg = load_yaml_config('config.yaml')
 
     bot_token = None
     if getattr(args, 'bot', False):

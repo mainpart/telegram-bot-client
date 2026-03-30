@@ -1,6 +1,7 @@
 # Completions for telegram-cli
 # AUTOMATICALLY GENERATED
 
+complete -c telegram-cli -l config -d 'Path to config.yaml.' -r
 complete -c telegram-cli -n '__fish_use_subcommand' -a 'init' -d ''
 complete -c telegram-cli -n '__fish_use_subcommand' -a 'chats' -d ''
 complete -c telegram-cli -n '__fish_use_subcommand' -a 'read' -d ''

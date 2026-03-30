@@ -40,7 +40,7 @@ pip install git+https://github.com/mainpart/telegram-client.git
 
 1. Go to [my.telegram.org](https://my.telegram.org), log in with your phone number, and create an application. You will get `api_id` and `api_hash` — these are required by Telegram for any third-party client to connect to their API.
 
-2. Create `config.yaml` in the directory where you run `telegram-cli`:
+2. Create `config.yaml`:
 
 ```yaml
 telegram:
@@ -64,7 +64,17 @@ export TELEGRAM_API_HASH=a1b2c3d4...
 export TELEGRAM_SESSION=1ApW...
 ```
 
-> `telegram-cli` looks for `config.yaml` in the current working directory. Keep it next to your scripts or `cd` into the project directory before running commands.
+### Config file location
+
+`telegram-cli` looks for `config.yaml` in this order:
+
+1. `--config /path/to/config.yaml` — explicit path (highest priority)
+2. `./config.yaml` — current working directory
+3. `~/.config/telegram-client/config.yaml` — XDG standard location
+
+`profiles.json` is looked up next to the resolved config file.
+
+In Docker, `./config.yaml` maps to `/app/config.yaml` (the container's `WORKDIR`). If no config file is found, environment variables are used as fallback.
 
 ---
 

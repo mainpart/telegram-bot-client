@@ -27,6 +27,7 @@ _shtab_telegram_cli_commands() {
 
 _shtab_telegram_cli_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--config[Path to config.yaml.]:config:"
 )
 
 # guard to ensure default positional specs are added only once per session
