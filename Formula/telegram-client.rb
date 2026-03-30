@@ -12,6 +12,13 @@ class TelegramClient < Formula
     system libexec/"bin/pip", "install", "."
     bin.install_symlink libexec/"bin/telegram-cli"
     bin.install_symlink libexec/"bin/telegram-listen"
+
+    bash_completion.install "completions/telegram-cli.bash" => "telegram-cli"
+    bash_completion.install "completions/telegram-listen.bash" => "telegram-listen"
+    zsh_completion.install "completions/_telegram-cli"
+    zsh_completion.install "completions/_telegram-listen"
+    fish_completion.install "completions/telegram-cli.fish"
+    fish_completion.install "completions/telegram-listen.fish"
   end
 
   test do

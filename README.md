@@ -21,7 +21,7 @@ brew tap mainpart/telegram-client
 brew install telegram-client
 ```
 
-This installs two commands: `telegram-cli` and `telegram-listen`.
+This installs two commands: `telegram-cli` and `telegram-listen`, plus shell completions for bash, zsh and fish.
 
 ### pip
 
@@ -37,14 +37,40 @@ cd telegram-client
 pip install .
 ```
 
+### Docker
+
+```bash
+docker run -e TELEGRAM_API_ID=12345678 \
+           -e TELEGRAM_API_HASH=a1b2c3d4... \
+           -e TELEGRAM_SESSION=1ApW... \
+           mainpart/telegram-client
+```
+
+With config file:
+
+```bash
+docker run -v ./config.yaml:/app/config.yaml mainpart/telegram-client
+```
+
+Override entrypoint for CLI commands:
+
+```bash
+docker run --entrypoint telegram-cli \
+           -e TELEGRAM_API_ID=12345678 \
+           -e TELEGRAM_API_HASH=a1b2c3d4... \
+           -e TELEGRAM_SESSION=1ApW... \
+           mainpart/telegram-client --list-chats
+```
+
 ### Optional dependencies
 
 ```bash
-pip install 'telegram-client[mcp]'     # for telegram_mcp.py (MCP server)
-pip install fastapi uvicorn             # for telegram_api.py
-pip install aiohttp                     # for http adapter
-pip install motor                       # for mongodb adapter
-pip install aio-pika                    # for rabbitmq adapter
+pip install 'telegram-client[mcp]'       # for telegram_mcp.py (MCP server)
+pip install 'telegram-client[http]'      # for http adapter
+pip install 'telegram-client[mongodb]'   # for mongodb adapter
+pip install 'telegram-client[rabbitmq]'  # for rabbitmq adapter
+pip install 'telegram-client[all]'       # all adapters
+pip install fastapi uvicorn              # for telegram_api.py
 ```
 
 ## Setup

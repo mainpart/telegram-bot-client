@@ -1,14 +1,40 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "telegram-client"
 version = "0.1.0"
 description = "CLI and real-time listener for Telegram via user account"
+readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.11"
+keywords = ["telegram", "cli", "listener", "telethon", "automation"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+]
 dependencies = ["telethon>=1.28", "PyYAML>=6.0"]
 
 [project.optional-dependencies]
 mcp = ["mcp>=1.7"]
+http = ["aiohttp>=3.9"]
+mongodb = ["motor>=3.3"]
+rabbitmq = ["aio-pika>=9.0"]
+all = ["aiohttp>=3.9", "motor>=3.3", "aio-pika>=9.0"]
+
+[project.urls]
+Homepage = "https://github.com/mainpart/telegram-client"
+Repository = "https://github.com/mainpart/telegram-client"
+Issues = "https://github.com/mainpart/telegram-client/issues"
 
 [project.scripts]
 telegram-cli = "telegram_cli:main"
 telegram-listen = "telegram_listen:main"
 telegram-mcp = "telegram_mcp:main"
+
+[tool.setuptools]
+py-modules = ["telegram_cli", "telegram_listen", "telegram_mcp", "telegram_api"]
+packages = ["tg", "adapters"]

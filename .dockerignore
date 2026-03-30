@@ -1,0 +1,14 @@
+.git
+.venv
+__pycache__
+*.pyc
+.idea
+.cursor
+.claude
+.DS_Store
+*.session
+config.yaml
+profiles.json
+dist
+build
+*.egg-info

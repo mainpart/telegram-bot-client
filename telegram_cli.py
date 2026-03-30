@@ -16,7 +16,7 @@ from tg import (
 import argparse
 import os
 
-async def async_main():
+def build_parser():
     parser = argparse.ArgumentParser(description="Telegram CLI — one-shot commands")
 
     group = parser.add_mutually_exclusive_group()
@@ -45,7 +45,7 @@ async def async_main():
     parser.add_argument('--edit-message', type=str, help='New text for message.')
     parser.add_argument('--delete-message', action='store_true', help='Delete a message. Requires --chat and --message-id.')
     parser.add_argument('--get-entities', nargs='+', help='Get info for users/chats by ID or username.')
-    parser.add_argument('--filter', type=str, help='Media type filter: photo, video, document, url, voice, gif, music, round_video, mentions, pinned.')
+    parser.add_argument('--filter', type=str, choices=['photo', 'video', 'document', 'url', 'voice', 'gif', 'music', 'round_video', 'mentions', 'pinned'], help='Media type filter.')
     parser.add_argument('--min-date', type=str, help='Min date in ISO format (e.g. 2026-01-01).')
     parser.add_argument('--max-date', type=str, help='Max date in ISO format.')
     parser.add_argument('--groups-only', action='store_true', help='Search in groups only.')
@@ -53,6 +53,10 @@ async def async_main():
     parser.add_argument('--broadcasts-only', action='store_true', help='Search in channels only.')
     parser.add_argument('--limit', type=int, help='Number of items to fetch.')
     add_common_args(parser)
+    return parser
+
+async def async_main():
+    parser = build_parser()
     args = parser.parse_args()
 
     if len(sys.argv) == 1:

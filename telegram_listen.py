@@ -8,13 +8,17 @@ from tg import (
 )
 import argparse
 
-async def async_main():
+def build_parser():
     parser = argparse.ArgumentParser(description="Telegram Listener — real-time message streaming")
 
     parser.add_argument('--chat', type=str, action='append', help='Chat to listen (ID or username). Can be repeated.')
     parser.add_argument('--private-only', action='store_true', help='Listen to private messages only.')
     parser.add_argument('--mentioned-only', action='store_true', help='Only messages mentioning me.')
     add_common_args(parser)
+    return parser
+
+async def async_main():
+    parser = build_parser()
     args = parser.parse_args()
 
     if args.incoming_only and args.outgoing_only:
