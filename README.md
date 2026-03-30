@@ -17,7 +17,8 @@ adapters/              — Output adapters (stdout, http, mongodb, rabbitmq)
 ### Homebrew
 
 ```bash
-brew install mainpart/telegram-client/telegram-client
+brew tap mainpart/telegram-client
+brew install telegram-client
 ```
 
 This installs two commands: `telegram-cli` and `telegram-listen`.
