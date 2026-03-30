@@ -32,9 +32,8 @@ Issues = "https://github.com/mainpart/telegram-client/issues"
 
 [project.scripts]
 telegram-cli = "telegram_cli:main"
-telegram-listen = "telegram_listen:main"
 telegram-mcp = "telegram_mcp:main"
 
 [tool.setuptools]
-py-modules = ["telegram_cli", "telegram_listen", "telegram_mcp", "telegram_api"]
+py-modules = ["telegram_cli", "telegram_mcp", "telegram_api"]
 packages = ["tg", "adapters"]

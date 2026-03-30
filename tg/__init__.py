@@ -1,6 +1,6 @@
 from tg.core import (
     logger, load_yaml_config, load_profiles, init_adapters_from_config,
-    close_adapters, connect_client, start_client, add_common_args, resolve_bot_token,
+    close_adapters, connect_client, start_client, resolve_bot_token,
     parse_chat_id, apply_message_filters, cleanup_json, emit_message_to_adapters,
 )
 from tg.commands import (

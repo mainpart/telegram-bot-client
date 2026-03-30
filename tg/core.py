@@ -182,7 +182,7 @@ async def start_client(client, bot_token=None):
             return False
     return True
 
-# --- Shared argparse ---
+# --- Shared helpers ---
 
 def resolve_bot_token(yaml_cfg):
     """Read bot token from config.yaml or env."""
@@ -191,18 +191,6 @@ def resolve_bot_token(yaml_cfg):
     if not token:
         logger.error("bot_token not set in config.yaml or TELEGRAM_BOT_TOKEN env.")
     return token
-
-def add_common_args(parser):
-    parser.add_argument('--profile', type=str, default='default', help='Filtering profile from profiles.json.')
-    parser.add_argument('--bot', action='store_true', help='Bot mode (token from config.yaml telegram.bot_token).')
-    parser.add_argument('--incoming-only', action='store_true', help='Filter only incoming messages.')
-    parser.add_argument('--outgoing-only', action='store_true', help='Filter only outgoing messages.')
-    parser.add_argument('--from-user', type=str, help='Filter messages from specific user ID.')
-    parser.add_argument('--pattern', type=str, help='Filter messages matching regex pattern.')
-    parser.add_argument('--has-media', action='store_true', help='Filter messages with media only.')
-    parser.add_argument('--forwarded-only', action='store_true', help='Filter only forwarded messages.')
-    parser.add_argument('--replies-only', action='store_true', help='Filter only reply messages.')
-    parser.add_argument('--has-reactions', action='store_true', help='Filter messages with reactions only.')
 
 def parse_chat_id(value):
     """Convert string to int if it's a numeric ID."""

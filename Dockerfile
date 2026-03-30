@@ -2,4 +2,4 @@ FROM python:3.13-slim
 WORKDIR /app
 COPY . .
 RUN pip install --no-cache-dir '.[all]'
-ENTRYPOINT ["telegram-listen"]
+ENTRYPOINT ["telegram-cli", "listen"]

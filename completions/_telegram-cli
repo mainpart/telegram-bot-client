@@ -5,58 +5,236 @@
 
 _shtab_telegram_cli_commands() {
   local _commands=(
-    
+    "chats:"
+    "click:"
+    "delete:"
+    "download:"
+    "edit:"
+    "forward:"
+    "info:"
+    "init:"
+    "listen:"
+    "react:"
+    "read:"
+    "reply:"
+    "search-chat:"
+    "search-contacts:"
+    "search-messages:"
+    "send:"
   )
   _describe 'telegram-cli commands' _commands
 }
 
 _shtab_telegram_cli_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
-  "--init[Login and generate StringSession token.]"
-  "--list-chats[List recent chats.]"
-  "--search-messages[Search message text across all chats.]:search_messages:"
-  "--search-contacts[Search users, groups, channels by name or username.]:search_contacts:"
-  "--search-chat[Search messages within a specific chat (requires --chat).]:search_chat:"
-  "--chat[Chat username or ID.]:chat:"
-  "--from-id[Start message ID.]:from_id:"
-  "--to-id[End message ID.]:to_id:"
-  "--inclusive[Include boundary messages.]"
-  "--forward[Read newer messages.]"
-  "--backward[Read older messages.]"
-  "--send-message[Text to send.]:send_message:"
-  "--send-files[Files to send.]:send_files:"
-  "--reply-to[Message ID to reply to.]:reply_to:"
-  "--target-chat[Target chat for forward\/cross-chat reply.]:target_chat:"
-  "--click-button[Button text to click.]:click_button:"
-  "--message-id[Message ID for actions.]:message_id:"
-  "--forward-message[Forward message.]"
-  "--reply-message[Reply text.]:reply_message:"
-  "--download[Download file from message.]"
-  "--add-reaction[Add reaction emoji.]:add_reaction:"
-  "--edit-message[New text for message.]:edit_message:"
-  "--delete-message[Delete a message. Requires --chat and --message-id.]"
-  "--get-entities[Get info for users\/chats by ID or username.]:get_entities:"
-  "--filter[Media type filter.]:filter:(photo video document url voice gif music round_video mentions pinned)"
-  "--min-date[Min date in ISO format (e.g. 2026-01-01).]:min_date:"
-  "--max-date[Max date in ISO format.]:max_date:"
-  "--groups-only[Search in groups only.]"
-  "--users-only[Search in private chats only.]"
-  "--broadcasts-only[Search in channels only.]"
-  "--limit[Number of items to fetch.]:limit:"
-  "--profile[Filtering profile from profiles.json.]:profile:"
-  "--bot[Bot mode (token from config.yaml telegram.bot_token).]"
-  "--incoming-only[Filter only incoming messages.]"
-  "--outgoing-only[Filter only outgoing messages.]"
-  "--from-user[Filter messages from specific user ID.]:from_user:"
-  "--pattern[Filter messages matching regex pattern.]:pattern:"
-  "--has-media[Filter messages with media only.]"
-  "--forwarded-only[Filter only forwarded messages.]"
-  "--replies-only[Filter only reply messages.]"
-  "--has-reactions[Filter messages with reactions only.]"
 )
 
 # guard to ensure default positional specs are added only once per session
 _shtab_telegram_cli_defaults_added=0
+
+_shtab_telegram_cli_chats_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--limit[Number of chats (default\: 100).]:limit:"
+  "--profile[Filtering profile.]:profile:"
+  "--bot[Bot mode (uses bot_token from config).]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_chats_defaults_added=0
+
+_shtab_telegram_cli_click_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Chat ID or username.:"
+  ":Message ID.:"
+  ":Button text to click.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_click_defaults_added=0
+
+_shtab_telegram_cli_delete_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Chat ID or username.:"
+  ":Message ID.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_delete_defaults_added=0
+
+_shtab_telegram_cli_download_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Chat ID or username.:"
+  ":Message ID.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_download_defaults_added=0
+
+_shtab_telegram_cli_edit_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Chat ID or username.:"
+  ":Message ID.:"
+  ":New message text.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_edit_defaults_added=0
+
+_shtab_telegram_cli_forward_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Source chat ID or username.:"
+  ":Message ID.:"
+  ":Target chat ID or username.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_forward_defaults_added=0
+
+_shtab_telegram_cli_info_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--profile[Filtering profile.]:profile:"
+  "--bot[Bot mode (uses bot_token from config).]"
+  "(*):User\/chat IDs or usernames.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_info_defaults_added=0
+
+_shtab_telegram_cli_init_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_init_defaults_added=0
+
+_shtab_telegram_cli_listen_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "*--chat[Chat to listen (repeatable).]:chat:"
+  "--private-only[Private messages only.]"
+  "--mentioned-only[Only messages mentioning me.]"
+  "--profile[Filtering profile.]:profile:"
+  "--bot[Bot mode (uses bot_token from config).]"
+  "--incoming-only[Only incoming messages.]"
+  "--outgoing-only[Only outgoing messages.]"
+  "--from-user[Messages from specific user ID.]:from_user:"
+  "--pattern[Filter by regex pattern.]:pattern:"
+  "--has-media[Only messages with media.]"
+  "--forwarded-only[Only forwarded messages.]"
+  "--replies-only[Only replies.]"
+  "--has-reactions[Only messages with reactions.]"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_listen_defaults_added=0
+
+_shtab_telegram_cli_react_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Chat ID or username.:"
+  ":Message ID.:"
+  ":Reaction emoji.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_react_defaults_added=0
+
+_shtab_telegram_cli_read_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--from-id[Start message ID.]:from_id:"
+  "--to-id[End message ID.]:to_id:"
+  "--forward[Read newer messages.]"
+  "--backward[Read older messages.]"
+  "--inclusive[Include boundary messages.]"
+  "--limit[Number of messages.]:limit:"
+  "--profile[Filtering profile.]:profile:"
+  "--bot[Bot mode (uses bot_token from config).]"
+  "--incoming-only[Only incoming messages.]"
+  "--outgoing-only[Only outgoing messages.]"
+  "--from-user[Messages from specific user ID.]:from_user:"
+  "--pattern[Filter by regex pattern.]:pattern:"
+  "--has-media[Only messages with media.]"
+  "--forwarded-only[Only forwarded messages.]"
+  "--replies-only[Only replies.]"
+  "--has-reactions[Only messages with reactions.]"
+  ":Chat ID or username.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_read_defaults_added=0
+
+_shtab_telegram_cli_reply_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--files[Files to send.]:files:"
+  "--target-chat[Target chat for cross-chat reply.]:target_chat:"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Chat ID or username.:"
+  ":Message ID to reply to.:"
+  ":Reply text.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_reply_defaults_added=0
+
+_shtab_telegram_cli_search_chat_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--limit[Max results.]:limit:"
+  "--filter[Media type filter.]:filter:(photo video document url voice gif music round_video mentions pinned)"
+  "--from-user[From specific user ID.]:from_user:"
+  "--min-date[Min date (YYYY-MM-DD).]:min_date:"
+  "--max-date[Max date (YYYY-MM-DD).]:max_date:"
+  "--profile[Filtering profile.]:profile:"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Chat ID or username.:"
+  ":Search query.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_search_chat_defaults_added=0
+
+_shtab_telegram_cli_search_contacts_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--limit[Max results.]:limit:"
+  "--profile[Filtering profile.]:profile:"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Search query.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_search_contacts_defaults_added=0
+
+_shtab_telegram_cli_search_messages_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--limit[Max results.]:limit:"
+  "--filter[Media type filter.]:filter:(photo video document url voice gif music round_video mentions pinned)"
+  "--min-date[Min date (YYYY-MM-DD).]:min_date:"
+  "--max-date[Max date (YYYY-MM-DD).]:max_date:"
+  "--groups-only[Groups only.]"
+  "--users-only[Private chats only.]"
+  "--broadcasts-only[Channels only.]"
+  "--profile[Filtering profile.]:profile:"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Search query.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_search_messages_defaults_added=0
+
+_shtab_telegram_cli_send_options=(
+  "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--files[Files to send.]:files:"
+  "--reply-to[Message ID to reply to.]:reply_to:"
+  "--bot[Bot mode (uses bot_token from config).]"
+  ":Chat ID or username.:"
+  ":Message text.:"
+)
+
+# guard to ensure default positional specs are added only once per session
+_shtab_telegram_cli_send_defaults_added=0
 
 
 _shtab_telegram_cli() {
@@ -77,7 +255,22 @@ _shtab_telegram_cli() {
       (( CURRENT += 1 ))
       curcontext="${curcontext%:*:*}:_shtab_telegram_cli-$line[1]:"
       case $line[1] in
-        
+        chats) _arguments -C -s $_shtab_telegram_cli_chats_options ;;
+        click) _arguments -C -s $_shtab_telegram_cli_click_options ;;
+        delete) _arguments -C -s $_shtab_telegram_cli_delete_options ;;
+        download) _arguments -C -s $_shtab_telegram_cli_download_options ;;
+        edit) _arguments -C -s $_shtab_telegram_cli_edit_options ;;
+        forward) _arguments -C -s $_shtab_telegram_cli_forward_options ;;
+        info) _arguments -C -s $_shtab_telegram_cli_info_options ;;
+        init) _arguments -C -s $_shtab_telegram_cli_init_options ;;
+        listen) _arguments -C -s $_shtab_telegram_cli_listen_options ;;
+        react) _arguments -C -s $_shtab_telegram_cli_react_options ;;
+        read) _arguments -C -s $_shtab_telegram_cli_read_options ;;
+        reply) _arguments -C -s $_shtab_telegram_cli_reply_options ;;
+        search-chat) _arguments -C -s $_shtab_telegram_cli_search_chat_options ;;
+        search-contacts) _arguments -C -s $_shtab_telegram_cli_search_contacts_options ;;
+        search-messages) _arguments -C -s $_shtab_telegram_cli_search_messages_options ;;
+        send) _arguments -C -s $_shtab_telegram_cli_send_options ;;
       esac
   esac
 }
