@@ -46,8 +46,9 @@ def build_parser():
     subparsers = parser.add_subparsers(dest='command')
 
     # init
-    _sub(subparsers, 'init', 'Login and generate session token',
-        epilog='example:\n  telegram-cli init')
+    p = _sub(subparsers, 'init', 'Login and generate session token',
+        epilog='example:\n  telegram-cli init --phone +79001234567')
+    p.add_argument('--phone', type=str, help='Phone number for login.')
 
     # chats
     p = _sub(subparsers, 'chats', 'List recent chats', epilog="""\
@@ -254,7 +255,7 @@ async def async_main(argv=None):
         client = TelegramClient(session, api_id, api_hash)
         try:
             await client.start(
-                phone=lambda: str(telegram_cfg.get('phone_number') or '') or input('Phone number: '),
+                phone=lambda: args.phone or input('Phone number: '),
                 code_callback=lambda: getpass('Enter the code: '),
                 password=lambda: getpass('Enter your 2FA password: ')
             )

@@ -107,6 +107,7 @@ _shtab_telegram_cli_info_defaults_added=0
 
 _shtab_telegram_cli_init_options=(
   "(- : *)"{-h,--help}"[show this help message and exit]"
+  "--phone[Phone number for login.]:phone:"
 )
 
 # guard to ensure default positional specs are added only once per session

@@ -1,52 +1,25 @@
 # Completions for telegram-cli
 # AUTOMATICALLY GENERATED
 
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'init' -d 'telegram-cli init [-h]'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'chats' -d 'telegram-cli chats [-h] [--limit LIMIT] [--profile PROFILE] [--bot]'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'read' -d 'telegram-cli read [-h] [--from-id FROM_ID] [--to-id TO_ID] [--forward]
-                         [--backward] [--inclusive] [--limit LIMIT]
-                         [--profile PROFILE] [--bot] [--incoming-only]
-                         [--outgoing-only] [--from-user FROM_USER]
-                         [--pattern PATTERN] [--has-media] [--forwarded-only]
-                         [--replies-only] [--has-reactions]
-                         chat'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'send' -d 'telegram-cli send [-h] [--files FILES [FILES ...]]
-                         [--reply-to REPLY_TO] [--bot]
-                         chat [text]'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'edit' -d 'telegram-cli edit [-h] [--bot] chat message_id text'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'delete' -d 'telegram-cli delete [-h] [--bot] chat message_id'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'forward' -d 'telegram-cli forward [-h] [--bot] chat message_id target_chat'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'reply' -d 'telegram-cli reply [-h] [--files FILES [FILES ...]]
-                          [--target-chat TARGET_CHAT] [--bot]
-                          chat message_id [text]'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'react' -d 'telegram-cli react [-h] [--bot] chat message_id emoji'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'click' -d 'telegram-cli click [-h] [--bot] chat message_id button_text'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'download' -d 'telegram-cli download [-h] [--bot] chat message_id'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'search-messages' -d 'telegram-cli search-messages [-h] [--limit LIMIT]
-                                    [--filter {photo,video,document,url,voice,gif,music,round_video,mentions,pinned}]
-                                    [--min-date MIN_DATE]
-                                    [--max-date MAX_DATE] [--groups-only]
-                                    [--users-only] [--broadcasts-only]
-                                    [--profile PROFILE] [--bot]
-                                    query'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'search-contacts' -d 'telegram-cli search-contacts [-h] [--limit LIMIT] [--profile PROFILE]
-                                    [--bot]
-                                    query'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'search-chat' -d 'telegram-cli search-chat [-h] [--limit LIMIT]
-                                [--filter {photo,video,document,url,voice,gif,music,round_video,mentions,pinned}]
-                                [--from-user FROM_USER] [--min-date MIN_DATE]
-                                [--max-date MAX_DATE] [--profile PROFILE]
-                                [--bot]
-                                chat query'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'info' -d 'telegram-cli info [-h] [--profile PROFILE] [--bot] entity [entity ...]'
-complete -c telegram-cli -n '__fish_use_subcommand' -a 'listen' -d 'telegram-cli listen [-h] [--chat CHAT] [--private-only]
-                           [--mentioned-only] [--profile PROFILE] [--bot]
-                           [--incoming-only] [--outgoing-only]
-                           [--from-user FROM_USER] [--pattern PATTERN]
-                           [--has-media] [--forwarded-only] [--replies-only]
-                           [--has-reactions]'
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'init' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'chats' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'read' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'send' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'edit' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'delete' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'forward' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'reply' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'react' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'click' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'download' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'search-messages' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'search-contacts' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'search-chat' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'info' -d ''
+complete -c telegram-cli -n '__fish_use_subcommand' -a 'listen' -d ''
 
 complete -c telegram-cli -n '__fish_seen_subcommand_from init' -l help -d 'show this help message and exit'
+complete -c telegram-cli -n '__fish_seen_subcommand_from init' -l phone -d 'Phone number for login.' -r
 complete -c telegram-cli -n '__fish_seen_subcommand_from chats' -l help -d 'show this help message and exit'
 complete -c telegram-cli -n '__fish_seen_subcommand_from chats' -l limit -d 'Number of chats (default: 100).' -r
 complete -c telegram-cli -n '__fish_seen_subcommand_from chats' -l profile -d 'Filtering profile.' -r

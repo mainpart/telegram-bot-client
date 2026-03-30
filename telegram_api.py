@@ -10,7 +10,7 @@ from tg import (
     close_adapters, connect_client, start_client, parse_chat_id,
     get_updates, send_message, add_reaction, forward_message,
     send_cross_chat_reply, edit_message, click_button, download_file,
-    list_chats, search_messages, search_contacts, get_entities,
+    list_chats, search_messages, search, get_entities,
 )
 
 # --- Pydantic models for request bodies ---
@@ -138,7 +138,7 @@ async def api_search_messages(q: str = Query(...), limit: int = 100, profile: st
 
 @app.get("/search/contacts")
 async def api_search_contacts(q: str = Query(...), limit: int = 20, profile: str = 'default'):
-    return await search_contacts(client, q, limit, profile)
+    return await search(client, q, limit, profile)
 
 @app.get("/chats")
 async def api_list_chats(limit: int = 100, profile: str = 'default'):

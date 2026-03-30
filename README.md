@@ -1,16 +1,24 @@
 # Telegram Client
 
-CLI and REST API for interacting with Telegram via a user account. Designed for automation, scripting and integrations.
+CLI, REST API and MCP server for interacting with Telegram via a user account. Designed for automation, scripting and integrations.
 
-## Project Structure
+## Features
 
-```
-telegram_cli.py        — CLI for one-shot commands and real-time listener
-telegram_api.py        — REST API server (FastAPI)
-telegram_mcp.py        — MCP server for AI assistants
-tg/                    — Shared library (core, commands, listeners)
-adapters/              — Output adapters (stdout, http, mongodb, rabbitmq)
-```
+- Read, send, edit, delete, forward messages
+- Search across all chats, within a chat, or by contacts
+- Download files, add reactions, click inline buttons
+- Real-time message listener with output adapters (stdout, HTTP webhook, MongoDB, RabbitMQ)
+- Bot mode (works with bot tokens)
+- Filtering by sender, media, regex, date range, reactions, forwards, replies
+
+## Modes of Operation
+
+| Mode | Use case | Entry point |
+|------|----------|-------------|
+| **CLI** | One-shot commands from terminal or scripts | `telegram-cli <command>` |
+| **Listener** | Real-time message streaming with adapters | `telegram-cli listen` |
+| **REST API** | HTTP endpoints for web integrations | `telegram_api.py` |
+| **MCP Server** | AI assistant tool integration | `telegram_mcp.py` |
 
 ## Installation
 
@@ -21,20 +29,10 @@ brew tap mainpart/telegram-client
 brew install telegram-client
 ```
 
-This installs `telegram-cli` with shell completions for bash, zsh and fish.
-
 ### pip
 
 ```bash
 pip install git+https://github.com/mainpart/telegram-client.git
-```
-
-### From source
-
-```bash
-git clone https://github.com/mainpart/telegram-client.git
-cd telegram-client
-pip install .
 ```
 
 ### Docker
@@ -46,36 +44,20 @@ docker run -e TELEGRAM_API_ID=12345678 \
            mainpart/telegram-client
 ```
 
-With config file:
-
-```bash
-docker run -v ./config.yaml:/app/config.yaml mainpart/telegram-client
-```
-
-Override entrypoint for CLI commands:
-
-```bash
-docker run --entrypoint telegram-cli \
-           -e TELEGRAM_API_ID=12345678 \
-           -e TELEGRAM_API_HASH=a1b2c3d4... \
-           -e TELEGRAM_SESSION=1ApW... \
-           mainpart/telegram-client chats
-```
-
 ### Optional dependencies
 
 ```bash
-pip install 'telegram-client[mcp]'       # for telegram_mcp.py (MCP server)
-pip install 'telegram-client[http]'      # for http adapter
-pip install 'telegram-client[mongodb]'   # for mongodb adapter
-pip install 'telegram-client[rabbitmq]'  # for rabbitmq adapter
+pip install 'telegram-client[mcp]'       # MCP server
+pip install 'telegram-client[http]'      # HTTP webhook adapter
+pip install 'telegram-client[mongodb]'   # MongoDB adapter
+pip install 'telegram-client[rabbitmq]'  # RabbitMQ adapter
 pip install 'telegram-client[all]'       # all adapters
-pip install fastapi uvicorn              # for telegram_api.py
+pip install fastapi uvicorn              # REST API
 ```
 
 ## Setup
 
-1. Get `api_id` and `api_hash` at [my.telegram.org](https://my.telegram.org)
+1. Go to [my.telegram.org](https://my.telegram.org), log in with your phone number, and create an application. You will get `api_id` and `api_hash` — these are required by Telegram for any third-party client to connect to their API.
 
 2. Create `config.yaml` (or copy from `config.yaml-default`):
 
@@ -88,269 +70,131 @@ telegram:
 3. Generate a session token:
 
 ```bash
-telegram-cli init
+telegram-cli init --phone +79001234567
 ```
 
-The token is saved to `config.yaml` automatically. Alternatively, set it via environment variable:
+The token is saved to `config.yaml` automatically. Alternatively, set credentials via environment variables:
 
 ```bash
-export TELEGRAM_SESSION="..."
+export TELEGRAM_API_ID=12345678
+export TELEGRAM_API_HASH=a1b2c3d4...
+export TELEGRAM_SESSION=1ApW...
 ```
 
-Phone number can be specified in config (only needed for `init`):
+---
 
-```yaml
-telegram:
-  phone_number: "+79001234567"
-```
+## 1. CLI
 
-## Commands
-
-All commands output JSON to stdout, errors to stderr. Run `telegram-cli <command> --help` for details.
+One-shot commands. Outputs JSON to stdout, errors to stderr. Run `telegram-cli <command> --help` for details on any command.
 
 ### init
 
-Interactive login. Prompts for phone number, confirmation code and 2FA password (if enabled). Saves the StringSession token to `config.yaml`.
+Interactive login. Prompts for confirmation code and 2FA password (if enabled).
 
 ```bash
-telegram-cli init
+telegram-cli init --phone +79001234567
+```
+
+### chats
+
+List recent dialogs.
+
+```bash
+telegram-cli chats
+telegram-cli chats --limit 500
+telegram-cli chats --profile dialogue
 ```
 
 ### read
 
-Read messages from a chat. Chat accepts a username (`mike_kuleshov`) or numeric ID (`1744485600`, `-1001605174968`). Without `--limit`, returns the last 20 messages.
+Read messages from a chat. Chat accepts a username or numeric ID.
 
 ```bash
-# Last 20 messages
 telegram-cli read mike_kuleshov
-
-# By numeric ID
-telegram-cli read -1001605174968
-
-# Specify limit
-telegram-cli read mike_kuleshov --limit 100
-
-# All messages (no limit)
-telegram-cli read mike_kuleshov --limit 0
-
-# Read forward (newer) from message ID 5000
-telegram-cli read mike_kuleshov --from-id 5000 --forward
-
-# Range from 1000 to 2000 (boundaries excluded)
-telegram-cli read mike_kuleshov --from-id 1000 --to-id 2000 --forward
-
-# Range with boundaries included
-telegram-cli read mike_kuleshov --from-id 1000 --to-id 2000 --forward --inclusive
-
-# With filtering profile
-telegram-cli read mike_kuleshov --limit 50 --profile dialogue
-
-# Only incoming messages with media
-telegram-cli read mike_kuleshov --limit 50 --incoming-only --has-media
-
-# Messages matching a regex pattern
-telegram-cli read mike_kuleshov --pattern "hello|привет"
-
-# Messages from a specific user
-telegram-cli read -1001605174968 --from-user 809799943
-
-# Only forwarded / replies / with reactions / outgoing
-telegram-cli read mike_kuleshov --forwarded-only
-telegram-cli read mike_kuleshov --replies-only
-telegram-cli read mike_kuleshov --has-reactions
-telegram-cli read mike_kuleshov --outgoing-only
+telegram-cli read 1744485600 --limit 100
+telegram-cli read 123 --from-id 5000 --forward
+telegram-cli read 123 --from-id 1000 --to-id 2000 --inclusive
+telegram-cli read 123 --has-media --incoming-only
+telegram-cli read 123 --pattern "hello|привет"
+telegram-cli read 123 --from-user 809799943
 ```
 
 ### send
 
-Send a message, files, or both. Text is optional when sending files.
+Send a message, files, or both.
 
 ```bash
-# Text message
-telegram-cli send 1744485600 "Hello!"
-
-# Single file
-telegram-cli send 1744485600 --files photo.jpg
-
-# Multiple files
-telegram-cli send 1744485600 --files photo1.jpg photo2.jpg video.mp4
-
-# Files with caption
-telegram-cli send 1744485600 "Document" --files doc.pdf
-
-# Reply to a message
-telegram-cli send 1744485600 "Thanks!" --reply-to 12345
-
-# File as reply
-telegram-cli send 1744485600 --files result.pdf --reply-to 12345
+telegram-cli send 123 "Hello!"
+telegram-cli send 123 --files photo.jpg video.mp4
+telegram-cli send 123 "Caption" --files doc.pdf
+telegram-cli send 123 "Reply" --reply-to 456
 ```
 
-### edit
-
-Edit your own message.
+### edit / delete
 
 ```bash
-telegram-cli edit 1744485600 123 "Corrected text"
+telegram-cli edit 123 456 "Corrected text"
+telegram-cli delete 123 456
 ```
 
-### delete
-
-Delete a message. Only works for your own messages or in chats where you have delete permissions.
-
-```bash
-telegram-cli delete 1744485600 123
-```
-
-### forward
-
-Forward a message from one chat to another.
+### forward / reply
 
 ```bash
 telegram-cli forward -1001605174968 123 1744485600
+telegram-cli reply 123 456 "Reply text"
+telegram-cli reply 123 456 --files photo.jpg
+telegram-cli reply 123 456 "Check this" --target-chat 789
 ```
 
-### reply
-
-Reply to a message. Text is optional when sending files. With `--target-chat` — cross-chat reply (files not supported).
+### react / click / download
 
 ```bash
-# Reply in the same chat
-telegram-cli reply 1744485600 123 "Reply text"
-
-# Reply with files
-telegram-cli reply 1744485600 123 --files photo.jpg
-
-# Cross-chat reply
-telegram-cli reply -1001605174968 123 "Check this" --target-chat 1744485600
-```
-
-### react
-
-Add an emoji reaction to a message.
-
-```bash
-telegram-cli react 1744485600 123 "🔥"
-telegram-cli react 1744485600 123 "👍"
-```
-
-### click
-
-Click an inline button on a message.
-
-```bash
-telegram-cli click 1744485600 123 "Confirm"
-```
-
-### download
-
-Download a file from a message (photo, video, document, voice). Saves to the current directory.
-
-```bash
-telegram-cli download 1744485600 211175
+telegram-cli react 123 456 "🔥"
+telegram-cli click 123 456 "Confirm"
+telegram-cli download 123 456
 ```
 
 ### search-messages
 
-Search message text across all chats. Results are grouped by chat.
+Search across all chats.
 
 ```bash
-# Simple search
-telegram-cli search-messages "search query"
-
-# With limit
-telegram-cli search-messages "search query" --limit 50
-
-# Only in groups / channels
-telegram-cli search-messages "search query" --groups-only
-telegram-cli search-messages "search query" --broadcasts-only
-
-# Only photos
-telegram-cli search-messages "search query" --filter photo
-
-# Date range
-telegram-cli search-messages "search query" --min-date 2026-01-01 --max-date 2026-03-01
-
-# With filtering profile
-telegram-cli search-messages "search query" --profile dialogue
+telegram-cli search-messages "query"
+telegram-cli search-messages "query" --groups-only --limit 50
+telegram-cli search-messages "query" --filter photo --min-date 2026-01-01
 ```
 
 ### search-contacts
 
-Search users, groups, channels by name or username.
+Search users, groups, channels by name.
 
 ```bash
 telegram-cli search-contacts "John"
-telegram-cli search-contacts "channel name" --limit 5
+telegram-cli search-contacts "channel" --limit 5
 ```
 
 ### search-chat
 
-Search messages within a specific chat (server-side). Faster than `--pattern` which filters locally.
+Search within a specific chat (server-side).
 
 ```bash
-# Search in a specific chat
-telegram-cli search-chat -5241856808 "FAR manager"
-
-# With media filter
-telegram-cli search-chat 1744485600 "photo" --filter photo
-
-# From a specific user
-telegram-cli search-chat -1001605174968 "test" --from-user 809799943
-
-# Date range
-telegram-cli search-chat 1744485600 "test" --min-date 2026-03-01
+telegram-cli search-chat 123 "query"
+telegram-cli search-chat 123 "photo" --filter photo
+telegram-cli search-chat 123 "test" --from-user 809799943
 ```
 
 ### info
 
-Full information about users, chats or channels.
+Get full info about users or chats.
 
 ```bash
-# By username
 telegram-cli info mike_kuleshov
-
-# By numeric ID
-telegram-cli info 1744485600
-
-# Multiple entities
-telegram-cli info mike_kuleshov Kuleshov 123456789
-```
-
-### listen
-
-Real-time message listener. Outputs each new, edited or deleted message as JSON. Press Ctrl+C to stop.
-
-Output goes through adapters (stdout by default). Configure adapters in `config.yaml`.
-
-```bash
-# Listen to everything
-telegram-cli listen
-
-# Specific chat
-telegram-cli listen --chat 1744485600
-
-# Multiple chats
-telegram-cli listen --chat 1744485600 --chat -1001605174968
-
-# Private messages only
-telegram-cli listen --private-only
-
-# Only messages mentioning me
-telegram-cli listen --mentioned-only
-
-# Incoming only with regex filter
-telegram-cli listen --incoming-only --pattern "urgent"
-
-# Only incoming messages with media in a specific chat
-telegram-cli listen --chat 1744485600 --incoming-only --has-media
-
-# With filtering profile
-telegram-cli listen --profile dialogue
+telegram-cli info 1744485600 123456789
 ```
 
 ### Message Filters
 
-Filters work with `read` and `listen`:
+Available for `read` and `listen`:
 
 | Filter | Description |
 |---|---|
@@ -365,7 +209,7 @@ Filters work with `read` and `listen`:
 
 ### Filtering Profiles
 
-`--profile <name>` applies a profile from `profiles.json` to clean JSON output. Removes unwanted keys and object types:
+`--profile <name>` applies a profile from `profiles.json` to clean JSON output:
 
 ```json
 {
@@ -376,46 +220,92 @@ Filters work with `read` and `listen`:
 }
 ```
 
-### Listener Events
+### Bot Mode
+
+Add `--bot` to any command. Uses `bot_token` from `config.yaml` or `TELEGRAM_BOT_TOKEN` env.
+
+```bash
+telegram-cli send 123 "test" --bot
+telegram-cli listen --bot --chat -1001605174968
+```
+
+---
+
+## 2. Listener
+
+Real-time message streaming. Runs until interrupted (Ctrl+C). Outputs each new, edited or deleted message as JSON through output adapters.
+
+```bash
+telegram-cli listen
+telegram-cli listen --chat 123 --chat 456
+telegram-cli listen --private-only
+telegram-cli listen --incoming-only --has-media
+telegram-cli listen --mentioned-only
+telegram-cli listen --profile dialogue
+```
+
+### Events
 
 - **NewMessage** — new messages
 - **MessageEdited** — edited messages
-- **MessageDeleted** — deleted messages (only IDs, no content)
-- **CallbackQuery** — inline button presses (bot mode only)
+- **MessageDeleted** — deleted messages (only IDs)
+- **CallbackQuery** — inline button presses (bot mode)
 
 ### Output Adapters
 
-Configured in `config.yaml`. If `adapters` section is missing, stdout is used by default.
+Configured in `config.yaml`. If `adapters` section is missing, stdout is used.
 
 ```yaml
 adapters:
   - type: stdout
-    pretty: true              # formatted JSON (default true)
+    pretty: true
 
   - type: http
     url: "https://example.com/webhook"
-    method: POST              # default POST
+    method: POST
     headers:
       Authorization: "Bearer token"
-    timeout: 10               # seconds, default 10
+    timeout: 10
 
   - type: mongodb
     uri: "mongodb://user:pass@mongo:27017"
     database: "telegram"
-    collection: "messages"    # default "messages"
+    collection: "messages"
 
   - type: rabbitmq
-    url: "amqp://guest:guest@localhost/"   # default localhost
-    routing_key: "telegram"                # default "telegram"
+    url: "amqp://guest:guest@localhost/"
+    routing_key: "telegram"
 ```
 
 Adapters run in parallel — each message is sent to all active adapters simultaneously.
 
-## telegram_api.py
+### Docker
 
-REST API server built with FastAPI. Auto-generated Swagger docs at `http://localhost:8000/docs`.
+The default Docker entrypoint runs the listener:
 
 ```bash
+docker run -e TELEGRAM_API_ID=12345678 \
+           -e TELEGRAM_API_HASH=a1b2c3d4... \
+           -e TELEGRAM_SESSION=1ApW... \
+           mainpart/telegram-client
+
+# With config file (for adapter settings)
+docker run -v ./config.yaml:/app/config.yaml mainpart/telegram-client
+
+# Run CLI commands instead
+docker run --entrypoint telegram-cli \
+           -v ./config.yaml:/app/config.yaml \
+           mainpart/telegram-client chats
+```
+
+---
+
+## 3. REST API
+
+HTTP server built with FastAPI. Auto-generated Swagger docs at `http://localhost:8000/docs`.
+
+```bash
+pip install fastapi uvicorn
 python telegram_api.py
 # or
 uvicorn telegram_api:app --host 0.0.0.0 --port 8000
@@ -423,26 +313,26 @@ uvicorn telegram_api:app --host 0.0.0.0 --port 8000
 
 ### Endpoints
 
-| Method | URL | Description | Parameters |
-|--------|-----|-------------|------------|
-| GET | `/messages/{chat_id}` | Read messages | query: fromId, toId, inclusive, forward, backward, limit, profile, filters |
-| POST | `/messages/{chat_id}` | Send message | body: `{text, replyTo}` |
-| PUT | `/messages/{chat_id}/{message_id}` | Edit message | body: `{text}` |
-| POST | `/messages/{chat_id}/{message_id}/forward` | Forward message | body: `{targetChat}` |
-| POST | `/messages/{chat_id}/{message_id}/reaction` | Add reaction | body: `{emoji}` |
-| POST | `/messages/{chat_id}/{message_id}/click` | Click button | body: `{buttonText}` |
-| GET | `/messages/{chat_id}/{message_id}/download` | Download file | returns file |
-| GET | `/search/messages` | Search messages | query: q, limit, profile |
-| GET | `/search/contacts` | Search contacts | query: q, limit, profile |
-| GET | `/chats` | List chats | query: limit, profile |
-| GET | `/entities/{id}` | Entity info | query: profile |
+| Method | URL | Description |
+|--------|-----|-------------|
+| GET | `/chats` | List chats |
+| GET | `/messages/{chat_id}` | Read messages (with filters) |
+| POST | `/messages/{chat_id}` | Send message |
+| PUT | `/messages/{chat_id}/{message_id}` | Edit message |
+| POST | `/messages/{chat_id}/{message_id}/forward` | Forward message |
+| POST | `/messages/{chat_id}/{message_id}/reaction` | Add reaction |
+| POST | `/messages/{chat_id}/{message_id}/click` | Click button |
+| GET | `/messages/{chat_id}/{message_id}/download` | Download file |
+| GET | `/search/messages` | Search messages |
+| GET | `/search/contacts` | Search contacts |
+| GET | `/entities/{id}` | Entity info |
 
 ### Examples
 
 ```bash
 curl 'http://localhost:8000/chats?limit=5'
-curl 'http://localhost:8000/search/contacts?q=John&limit=3'
 curl 'http://localhost:8000/messages/1744485600?limit=10&has_media=true'
+curl 'http://localhost:8000/search/contacts?q=John&limit=3'
 curl 'http://localhost:8000/entities/mike_kuleshov'
 curl -X POST http://localhost:8000/messages/1744485600 \
   -H 'Content-Type: application/json' \
@@ -455,53 +345,16 @@ curl -X POST http://localhost:8000/messages/1744485600/12345/reaction \
   -d '{"emoji": "🔥"}'
 ```
 
-## Bot Mode
+---
 
-No session required. Uses `bot_token` from `config.yaml` or `TELEGRAM_BOT_TOKEN` env.
+## 4. MCP Server
 
-```yaml
-# config.yaml
-telegram:
-  api_id: 12345678
-  api_hash: "a1b2c3d4..."
-  bot_token: "123456:ABC-DEF..."
-```
+Exposes all Telegram commands as tools for AI assistants. Works with Claude Code, Claude Desktop, Cursor, and any MCP-compatible client.
+
+### Setup with Claude Code
 
 ```bash
-# Bot listens to all chats
-telegram-cli listen --bot
-
-# Bot listens to a specific chat
-telegram-cli listen --bot --chat -1001605174968
-
-# Bot listens to private messages only
-telegram-cli listen --bot --private-only
-
-# Send a message as bot
-telegram-cli send 123 "test" --bot
-```
-
-In bot mode, `CallbackQuery` events (inline button presses) are also handled.
-
-## telegram_mcp.py
-
-MCP server exposing all Telegram commands as tools. Works with any MCP-compatible client (Claude Code, Claude Desktop, Cursor, etc.).
-
-### Configuration
-
-Reads credentials from `config.yaml` or environment variables:
-
-| config.yaml | env |
-|-------------|-----|
-| `telegram.api_id` | `TELEGRAM_API_ID` |
-| `telegram.api_hash` | `TELEGRAM_API_HASH` |
-| `telegram.session_string` | `TELEGRAM_SESSION` |
-| `telegram.bot_token` | `TELEGRAM_BOT_TOKEN` |
-
-### Local setup (Claude Code)
-
-```bash
-pip install mcp
+pip install 'telegram-client[mcp]'
 
 claude mcp add -s user \
   -e TELEGRAM_API_ID=12345678 \
@@ -510,7 +363,7 @@ claude mcp add -s user \
   telegram -- python /path/to/telegram_mcp.py
 ```
 
-Or add manually to `~/.claude.json`:
+Or add to `~/.claude.json`:
 
 ```json
 {
@@ -531,7 +384,7 @@ Or add manually to `~/.claude.json`:
 
 If `config.yaml` exists in the working directory, env variables are not needed.
 
-### Remote setup (via git)
+### Remote setup (no local clone)
 
 ```json
 {
@@ -549,21 +402,19 @@ If `config.yaml` exists in the working directory, env variables are not needed.
 }
 ```
 
-`uvx` caches the package — no re-download on subsequent runs.
-
-### Available tools
+### Available Tools
 
 | Tool | Description |
 |------|-------------|
 | `tg_get_messages` | Read messages from a chat (with filters) |
-| `tg_send_message` | Send a message with text, files (local paths or URLs), or both |
+| `tg_send_message` | Send text, files (local paths or URLs), or both |
 | `tg_edit_message` | Edit a message |
 | `tg_delete_message` | Delete a message |
 | `tg_forward_message` | Forward a message |
 | `tg_add_reaction` | Add emoji reaction |
 | `tg_download_file` | Download file from message |
-| `tg_search_messages` | Search message text across all chats (with filters: media type, date range, chat type) |
-| `tg_search_chat` | Search messages within a specific chat (server-side, fast) |
-| `tg_search` | Search users, groups, and channels by name or username |
+| `tg_search_messages` | Search across all chats |
+| `tg_search_chat` | Search within a specific chat |
+| `tg_search` | Search users, groups, channels |
 | `tg_list_chats` | List recent chats |
 | `tg_get_entities` | Get user/chat info |

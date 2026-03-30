@@ -3,7 +3,7 @@
 _shtab_telegram_cli_subparsers=('init' 'chats' 'read' 'send' 'edit' 'delete' 'forward' 'reply' 'react' 'click' 'download' 'search-messages' 'search-contacts' 'search-chat' 'info' 'listen')
 
 _shtab_telegram_cli_option_strings=('-h' '--help')
-_shtab_telegram_cli_init_option_strings=('-h' '--help')
+_shtab_telegram_cli_init_option_strings=('-h' '--help' '--phone')
 _shtab_telegram_cli_chats_option_strings=('-h' '--help' '--limit' '--profile' '--bot')
 _shtab_telegram_cli_read_option_strings=('-h' '--help' '--from-id' '--to-id' '--forward' '--backward' '--inclusive' '--limit' '--profile' '--bot' '--incoming-only' '--outgoing-only' '--from-user' '--pattern' '--has-media' '--forwarded-only' '--replies-only' '--has-reactions')
 _shtab_telegram_cli_send_option_strings=('-h' '--help' '--files' '--reply-to' '--bot')
