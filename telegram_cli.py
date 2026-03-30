@@ -8,7 +8,7 @@ from telethon import TelegramClient
 from telethon.sessions import StringSession
 from tg import (
     logger, load_yaml_config, load_profiles,
-    connect_client, start_client, add_common_args, parse_chat_id,
+    connect_client, start_client, add_common_args, resolve_bot_token, parse_chat_id,
     get_updates, send_message, add_reaction, forward_message,
     send_cross_chat_reply, edit_message, click_button, delete_message, download_file,
     list_chats, search_messages, search, search_chat, get_entities,
@@ -16,7 +16,7 @@ from tg import (
 import argparse
 import os
 
-async def main():
+async def async_main():
     parser = argparse.ArgumentParser(description="Telegram CLI — one-shot commands")
 
     group = parser.add_mutually_exclusive_group()
@@ -51,6 +51,7 @@ async def main():
     parser.add_argument('--groups-only', action='store_true', help='Search in groups only.')
     parser.add_argument('--users-only', action='store_true', help='Search in private chats only.')
     parser.add_argument('--broadcasts-only', action='store_true', help='Search in channels only.')
+    parser.add_argument('--limit', type=int, help='Number of items to fetch.')
     add_common_args(parser)
     args = parser.parse_args()
 
@@ -98,7 +99,13 @@ async def main():
             await client.disconnect()
         return
 
-    client = connect_client(yaml_cfg, bot_token=args.bot_token)
+    bot_token = None
+    if args.bot:
+        bot_token = resolve_bot_token(yaml_cfg)
+        if not bot_token:
+            return
+
+    client = connect_client(yaml_cfg, bot_token=bot_token)
     if not client:
         return
 
@@ -106,7 +113,7 @@ async def main():
     target_chat_entity = parse_chat_id(getattr(args, 'target_chat', None))
 
     try:
-        if not await start_client(client, bot_token=args.bot_token):
+        if not await start_client(client, bot_token=bot_token):
             return
 
         def output(data):
@@ -190,8 +197,11 @@ async def main():
         if client.is_connected():
             await client.disconnect()
 
-if __name__ == '__main__':
+def main():
     try:
-        asyncio.run(main())
+        asyncio.run(async_main())
     except (KeyboardInterrupt, SystemExit):
         print("\nExiting gracefully.")
+
+if __name__ == '__main__':
+    main()

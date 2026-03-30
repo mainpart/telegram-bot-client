@@ -3,24 +3,19 @@ import sys
 import logging
 from tg import (
     logger, load_yaml_config, load_profiles, init_adapters_from_config,
-    close_adapters, connect_client, start_client, add_common_args, parse_chat_id,
-    listen_chat, listen_private, listen_all,
+    close_adapters, connect_client, start_client, add_common_args,
+    resolve_bot_token, listen,
 )
 import argparse
 
-async def main():
+async def async_main():
     parser = argparse.ArgumentParser(description="Telegram Listener — real-time message streaming")
 
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument('--listen', type=str, help='Listen to a specific chat (ID or username).')
-    group.add_argument('--listen-private', action='store_true', help='Listen to all private messages.')
-    group.add_argument('--listen-all', action='store_true', help='Listen to all messages from every chat.')
+    parser.add_argument('--chat', type=str, action='append', help='Chat to listen (ID or username). Can be repeated.')
+    parser.add_argument('--private-only', action='store_true', help='Listen to private messages only.')
+    parser.add_argument('--mentioned-only', action='store_true', help='Only messages mentioning me.')
     add_common_args(parser)
     args = parser.parse_args()
-
-    if len(sys.argv) == 1:
-        parser.print_help()
-        return
 
     if args.incoming_only and args.outgoing_only:
         logger.error("--incoming-only and --outgoing-only are mutually exclusive.")
@@ -31,31 +26,22 @@ async def main():
 
     yaml_cfg = load_yaml_config('config.yaml')
 
-    # Default to --listen-all if botToken without explicit listen mode
-    if args.bot_token and not any([args.listen, args.listen_private, args.listen_all]):
-        args.listen_all = True
+    bot_token = None
+    if args.bot:
+        bot_token = resolve_bot_token(yaml_cfg)
+        if not bot_token:
+            return
 
-    if not any([args.listen, args.listen_private, args.listen_all]):
-        parser.print_help()
-        return
-
-    client = connect_client(yaml_cfg, bot_token=args.bot_token)
+    client = connect_client(yaml_cfg, bot_token=bot_token)
     if not client:
         return
 
     try:
-        if not await start_client(client, bot_token=args.bot_token):
+        if not await start_client(client, bot_token=bot_token):
             return
 
         await init_adapters_from_config(yaml_cfg)
-
-        if args.listen:
-            chat_entity = parse_chat_id(args.listen)
-            await listen_chat(client, chat_entity, args)
-        elif args.listen_private:
-            await listen_private(client, args)
-        elif args.listen_all:
-            await listen_all(client, args)
+        await listen(client, args)
 
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
@@ -67,8 +53,11 @@ async def main():
         if client.is_connected():
             await client.disconnect()
 
-if __name__ == '__main__':
+def main():
     try:
-        asyncio.run(main())
+        asyncio.run(async_main())
     except (KeyboardInterrupt, SystemExit):
         print("\nExiting gracefully.")
+
+if __name__ == '__main__':
+    main()

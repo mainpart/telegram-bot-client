@@ -184,10 +184,17 @@ async def start_client(client, bot_token=None):
 
 # --- Shared argparse ---
 
+def resolve_bot_token(yaml_cfg):
+    """Read bot token from config.yaml or env."""
+    telegram_cfg = (yaml_cfg or {}).get('telegram') or {}
+    token = telegram_cfg.get('bot_token') or os.environ.get('TELEGRAM_BOT_TOKEN')
+    if not token:
+        logger.error("bot_token not set in config.yaml or TELEGRAM_BOT_TOKEN env.")
+    return token
+
 def add_common_args(parser):
     parser.add_argument('--profile', type=str, default='default', help='Filtering profile from profiles.json.')
-    parser.add_argument('--bot-token', type=str, help='Bot token for bot mode.')
-    parser.add_argument('--limit', type=int, help='Number of items to fetch.')
+    parser.add_argument('--bot', action='store_true', help='Bot mode (token from config.yaml telegram.bot_token).')
     parser.add_argument('--incoming-only', action='store_true', help='Filter only incoming messages.')
     parser.add_argument('--outgoing-only', action='store_true', help='Filter only outgoing messages.')
     parser.add_argument('--from-user', type=str, help='Filter messages from specific user ID.')

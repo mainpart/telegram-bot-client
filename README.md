@@ -14,25 +14,36 @@ adapters/              — Output adapters (stdout, http, mongodb, rabbitmq)
 
 ## Installation
 
+### Homebrew
+
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
+brew install mainpart/telegram-client/telegram-client
 ```
 
-To run without activating the venv:
+This installs two commands: `telegram-cli` and `telegram-listen`.
+
+### pip
 
 ```bash
-.venv/bin/python telegram_cli.py --list-chats
+pip install git+https://github.com/mainpart/telegram-client.git
 ```
 
-Optional dependencies (install as needed):
+### From source
 
 ```bash
-pip install fastapi uvicorn    # for telegram_api.py
-pip install aiohttp            # for http adapter
-pip install motor              # for mongodb adapter
-pip install aio-pika           # for rabbitmq adapter
+git clone https://github.com/mainpart/telegram-client.git
+cd telegram-client
+pip install .
+```
+
+### Optional dependencies
+
+```bash
+pip install 'telegram-client[mcp]'     # for telegram_mcp.py (MCP server)
+pip install fastapi uvicorn             # for telegram_api.py
+pip install aiohttp                     # for http adapter
+pip install motor                       # for mongodb adapter
+pip install aio-pika                    # for rabbitmq adapter
 ```
 
 ## Setup
@@ -50,7 +61,7 @@ telegram:
 3. Generate a session token:
 
 ```bash
-python telegram_cli.py --init
+telegram-cli --init
 ```
 
 The token is saved to `config.yaml` automatically. Alternatively, set it via environment variable:
@@ -75,7 +86,7 @@ One-shot commands. Outputs JSON to stdout, errors to stderr.
 Interactive login. Prompts for phone number, confirmation code and 2FA password (if enabled). Saves the StringSession token to `config.yaml`.
 
 ```bash
-python telegram_cli.py --init
+telegram-cli --init
 ```
 
 ### Reading Messages (--chat)
@@ -86,52 +97,52 @@ Without additional arguments, returns the last 20 messages.
 
 ```bash
 # Last 20 messages (default)
-python telegram_cli.py --chat mike_kuleshov
+telegram-cli --chat mike_kuleshov
 
 # By numeric ID
-python telegram_cli.py --chat -1001605174968
+telegram-cli --chat -1001605174968
 
 # Specify limit
-python telegram_cli.py --chat mike_kuleshov --limit 100
+telegram-cli --chat mike_kuleshov --limit 100
 
 # All messages (no limit)
-python telegram_cli.py --chat mike_kuleshov --limit 0
+telegram-cli --chat mike_kuleshov --limit 0
 
 # Read backward (older) from message ID 5000
-python telegram_cli.py --chat mike_kuleshov --from-id 5000
+telegram-cli --chat mike_kuleshov --from-id 5000
 
 # Read forward (newer) from message ID 5000
-python telegram_cli.py --chat mike_kuleshov --from-id 5000 --forward
+telegram-cli --chat mike_kuleshov --from-id 5000 --forward
 
 # Range from 1000 to 2000 (boundaries excluded)
-python telegram_cli.py --chat mike_kuleshov --from-id 1000 --to-id 2000 --forward
+telegram-cli --chat mike_kuleshov --from-id 1000 --to-id 2000 --forward
 
 # Range with boundaries included
-python telegram_cli.py --chat mike_kuleshov --from-id 1000 --to-id 2000 --forward --inclusive
+telegram-cli --chat mike_kuleshov --from-id 1000 --to-id 2000 --forward --inclusive
 
 # With filtering profile
-python telegram_cli.py --chat mike_kuleshov --limit 50 --profile dialogue
+telegram-cli --chat mike_kuleshov --limit 50 --profile dialogue
 
 # Only incoming messages with media
-python telegram_cli.py --chat mike_kuleshov --limit 50 --incoming-only --has-media
+telegram-cli --chat mike_kuleshov --limit 50 --incoming-only --has-media
 
 # Messages matching a regex pattern
-python telegram_cli.py --chat mike_kuleshov --pattern "hello|привет"
+telegram-cli --chat mike_kuleshov --pattern "hello|привет"
 
 # Messages from a specific user
-python telegram_cli.py --chat -1001605174968 --from-user 809799943
+telegram-cli --chat -1001605174968 --from-user 809799943
 
 # Only forwarded messages
-python telegram_cli.py --chat mike_kuleshov --forwarded-only
+telegram-cli --chat mike_kuleshov --forwarded-only
 
 # Only replies
-python telegram_cli.py --chat mike_kuleshov --replies-only
+telegram-cli --chat mike_kuleshov --replies-only
 
 # Only messages with reactions
-python telegram_cli.py --chat mike_kuleshov --has-reactions
+telegram-cli --chat mike_kuleshov --has-reactions
 
 # Only outgoing messages
-python telegram_cli.py --chat mike_kuleshov --outgoing-only
+telegram-cli --chat mike_kuleshov --outgoing-only
 ```
 
 ### Search
@@ -142,13 +153,13 @@ Search users, groups, channels by name or username. Uses Telegram's `contacts.Se
 
 ```bash
 # Search by name
-python telegram_cli.py --search-contacts "Михаил Кулешов"
+telegram-cli --search-contacts "Михаил Кулешов"
 
 # Partial name
-python telegram_cli.py --search-contacts "Кулешов"
+telegram-cli --search-contacts "Кулешов"
 
 # With limit (default 20)
-python telegram_cli.py --search-contacts "марс и венера" --limit 5
+telegram-cli --search-contacts "марс и венера" --limit 5
 ```
 
 #### --search-messages
@@ -157,25 +168,25 @@ Search message text across all chats. Results are grouped by chat.
 
 ```bash
 # Simple search
-python telegram_cli.py --search-messages "search query"
+telegram-cli --search-messages "search query"
 
 # With limit (default 100)
-python telegram_cli.py --search-messages "search query" --limit 50
+telegram-cli --search-messages "search query" --limit 50
 
 # Only in groups
-python telegram_cli.py --search-messages "search query" --groups-only
+telegram-cli --search-messages "search query" --groups-only
 
 # Only in channels
-python telegram_cli.py --search-messages "search query" --broadcasts-only
+telegram-cli --search-messages "search query" --broadcasts-only
 
 # Only photos
-python telegram_cli.py --search-messages "search query" --filter photo
+telegram-cli --search-messages "search query" --filter photo
 
 # Date range
-python telegram_cli.py --search-messages "search query" --min-date 2026-01-01 --max-date 2026-03-01
+telegram-cli --search-messages "search query" --min-date 2026-01-01 --max-date 2026-03-01
 
 # With filtering profile
-python telegram_cli.py --search-messages "search query" --profile dialogue
+telegram-cli --search-messages "search query" --profile dialogue
 ```
 
 #### --search-chat
@@ -184,16 +195,16 @@ Search messages within a specific chat (server-side). Faster than `--pattern` wh
 
 ```bash
 # Search in a specific chat
-python telegram_cli.py --search-chat "FAR manager" --chat -5241856808
+telegram-cli --search-chat "FAR manager" --chat -5241856808
 
 # With media filter
-python telegram_cli.py --search-chat "photo" --chat 1744485600 --filter photo
+telegram-cli --search-chat "photo" --chat 1744485600 --filter photo
 
 # From a specific user
-python telegram_cli.py --search-chat "test" --chat -1001605174968 --from-user 809799943
+telegram-cli --search-chat "test" --chat -1001605174968 --from-user 809799943
 
 # Date range
-python telegram_cli.py --search-chat "test" --chat 1744485600 --min-date 2026-03-01
+telegram-cli --search-chat "test" --chat 1744485600 --min-date 2026-03-01
 ```
 
 ### --list-chats
@@ -202,13 +213,13 @@ List recent dialogs with chat info and last message.
 
 ```bash
 # Last 100 dialogs (default)
-python telegram_cli.py --list-chats
+telegram-cli --list-chats
 
 # More dialogs
-python telegram_cli.py --list-chats --limit 500
+telegram-cli --list-chats --limit 500
 
 # With profile
-python telegram_cli.py --list-chats --profile dialogue
+telegram-cli --list-chats --profile dialogue
 ```
 
 ### --get-entities
@@ -217,38 +228,38 @@ Full information about users, chats or channels. Includes bio, photo, birthday, 
 
 ```bash
 # By username
-python telegram_cli.py --get-entities mike_kuleshov
+telegram-cli --get-entities mike_kuleshov
 
 # By numeric ID
-python telegram_cli.py --get-entities 1744485600
+telegram-cli --get-entities 1744485600
 
 # Multiple entities
-python telegram_cli.py --get-entities mike_kuleshov Kuleshov 123456789
+telegram-cli --get-entities mike_kuleshov Kuleshov 123456789
 
 # With profile
-python telegram_cli.py --get-entities mike_kuleshov --profile dialogue
+telegram-cli --get-entities mike_kuleshov --profile dialogue
 ```
 
 ### Sending Messages (--send-message / --send-files)
 
 ```bash
 # Text message
-python telegram_cli.py --chat 1744485600 --send-message "Hello!"
+telegram-cli --chat 1744485600 --send-message "Hello!"
 
 # Single file
-python telegram_cli.py --chat 1744485600 --send-files photo.jpg
+telegram-cli --chat 1744485600 --send-files photo.jpg
 
 # Multiple files
-python telegram_cli.py --chat 1744485600 --send-files photo1.jpg photo2.jpg video.mp4
+telegram-cli --chat 1744485600 --send-files photo1.jpg photo2.jpg video.mp4
 
 # Files with caption
-python telegram_cli.py --chat 1744485600 --send-files doc.pdf --send-message "Document"
+telegram-cli --chat 1744485600 --send-files doc.pdf --send-message "Document"
 
 # Reply to a message
-python telegram_cli.py --chat 1744485600 --send-message "Thanks!" --reply-to 12345
+telegram-cli --chat 1744485600 --send-message "Thanks!" --reply-to 12345
 
 # File as reply
-python telegram_cli.py --chat 1744485600 --send-files result.pdf --reply-to 12345
+telegram-cli --chat 1744485600 --send-files result.pdf --reply-to 12345
 ```
 
 ### --forward-message
@@ -257,10 +268,10 @@ Forward a message from one chat to another.
 
 ```bash
 # Forward message 123 from chat A to chat B
-python telegram_cli.py --chat -1001605174968 --message-id 123 --forward-message --target-chat 1744485600
+telegram-cli --chat -1001605174968 --message-id 123 --forward-message --target-chat 1744485600
 
 # By numeric IDs
-python telegram_cli.py --chat -1001234567890 --message-id 456 --forward-message --target-chat -1009876543210
+telegram-cli --chat -1001234567890 --message-id 456 --forward-message --target-chat -1009876543210
 ```
 
 ### --reply-message
@@ -269,10 +280,10 @@ Reply to a message. Without `--target-chat` — replies in the same chat. With `
 
 ```bash
 # Reply in the same chat
-python telegram_cli.py --chat 1744485600 --message-id 123 --reply-message "Reply text"
+telegram-cli --chat 1744485600 --message-id 123 --reply-message "Reply text"
 
 # Cross-chat reply (reply in another chat referencing a message from --chat)
-python telegram_cli.py --chat -1001605174968 --message-id 123 --reply-message "Check this" --target-chat 1744485600
+telegram-cli --chat -1001605174968 --message-id 123 --reply-message "Check this" --target-chat 1744485600
 ```
 
 ### --edit-message
@@ -280,7 +291,7 @@ python telegram_cli.py --chat -1001605174968 --message-id 123 --reply-message "C
 Edit your own message.
 
 ```bash
-python telegram_cli.py --chat 1744485600 --message-id 123 --edit-message "Corrected text"
+telegram-cli --chat 1744485600 --message-id 123 --edit-message "Corrected text"
 ```
 
 ### --delete-message
@@ -288,7 +299,7 @@ python telegram_cli.py --chat 1744485600 --message-id 123 --edit-message "Correc
 Delete a message. Only works for your own messages or in chats where you have delete permissions.
 
 ```bash
-python telegram_cli.py --chat 1744485600 --message-id 123 --delete-message
+telegram-cli --chat 1744485600 --message-id 123 --delete-message
 ```
 
 ### --add-reaction
@@ -296,8 +307,8 @@ python telegram_cli.py --chat 1744485600 --message-id 123 --delete-message
 Add an emoji reaction to a message.
 
 ```bash
-python telegram_cli.py --chat 1744485600 --message-id 123 --add-reaction "🔥"
-python telegram_cli.py --chat 1744485600 --message-id 123 --add-reaction "👍"
+telegram-cli --chat 1744485600 --message-id 123 --add-reaction "🔥"
+telegram-cli --chat 1744485600 --message-id 123 --add-reaction "👍"
 ```
 
 ### --click-button
@@ -305,7 +316,7 @@ python telegram_cli.py --chat 1744485600 --message-id 123 --add-reaction "👍"
 Click an inline button on a message.
 
 ```bash
-python telegram_cli.py --chat 1744485600 --message-id 123 --click-button "Confirm"
+telegram-cli --chat 1744485600 --message-id 123 --click-button "Confirm"
 ```
 
 ### --download
@@ -313,7 +324,7 @@ python telegram_cli.py --chat 1744485600 --message-id 123 --click-button "Confir
 Download a file from a message (photo, video, document, voice). Saves to the current directory.
 
 ```bash
-python telegram_cli.py --chat 1744485600 --message-id 211175 --download
+telegram-cli --chat 1744485600 --message-id 211175 --download
 ```
 
 ### Message Filters
@@ -354,28 +365,28 @@ Without arguments, listens to all messages from every chat.
 
 ```bash
 # Listen to everything
-python telegram_listen.py
+telegram-listen
 
 # Specific chat
-python telegram_listen.py --chat 1744485600
+telegram-listen --chat 1744485600
 
 # Multiple chats
-python telegram_listen.py --chat 1744485600 --chat -1001605174968
+telegram-listen --chat 1744485600 --chat -1001605174968
 
 # Private messages only
-python telegram_listen.py --private-only
+telegram-listen --private-only
 
 # Only messages mentioning me
-python telegram_listen.py --mentioned-only
+telegram-listen --mentioned-only
 
 # Incoming only with regex filter
-python telegram_listen.py --incoming-only --pattern "urgent"
+telegram-listen --incoming-only --pattern "urgent"
 
 # Only incoming messages with media in a specific chat
-python telegram_listen.py --chat 1744485600 --incoming-only --has-media
+telegram-listen --chat 1744485600 --incoming-only --has-media
 
 # With filtering profile
-python telegram_listen.py --profile dialogue
+telegram-listen --profile dialogue
 ```
 
 ### Listener Filters
@@ -487,16 +498,16 @@ telegram:
 
 ```bash
 # Bot listens to all chats
-python telegram_listen.py --bot
+telegram-listen --bot
 
 # Bot listens to a specific chat
-python telegram_listen.py --bot --chat -1001605174968
+telegram-listen --bot --chat -1001605174968
 
 # Bot listens to private messages only
-python telegram_listen.py --bot --private-only
+telegram-listen --bot --private-only
 
 # Send a message as bot
-python telegram_cli.py --bot --chat 123 --send-message "test"
+telegram-cli --bot --chat 123 --send-message "test"
 ```
 
 In bot mode, `CallbackQuery` events (inline button presses) are also handled.

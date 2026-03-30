@@ -2,12 +2,18 @@ import asyncio
 import json
 from telethon import events
 from telethon.events import CallbackQuery
-from tg.core import logger, apply_message_filters, cleanup_json, emit_message_to_adapters
+from tg.core import logger, apply_message_filters, cleanup_json, emit_message_to_adapters, parse_chat_id
+
 
 async def message_event_handler(event, args):
     try:
         message_json = json.loads(event.message.to_json())
-        if not apply_message_filters(message_json, args):
+        # Client-side filters for what Telethon events don't support
+        if args.has_media and not message_json.get('media'):
+            return
+        if args.replies_only and not message_json.get('reply_to'):
+            return
+        if args.has_reactions and not message_json.get('reactions'):
             return
         cleaned_msg = cleanup_json(message_json, args.profile)
         if cleaned_msg:
@@ -66,53 +72,41 @@ async def callback_query_handler(event, args):
     except Exception as e:
         logger.error(f"Error in callback_query_handler: {e}")
 
-async def listen_chat(client, chat_entity, args):
-    logger.info(f"Listening for new messages in '{chat_entity}'... Press Ctrl+C to stop.")
-    client.add_event_handler(lambda event: message_event_handler(event, args), events.NewMessage(chats=chat_entity))
-    client.add_event_handler(lambda event: message_event_handler(event, args), events.MessageEdited(chats=chat_entity))
-    client.add_event_handler(lambda event: message_deleted_handler(event, args), events.MessageDeleted(chats=chat_entity))
-    if args.bot_token:
-        client.add_event_handler(lambda event: callback_query_handler(event, args), CallbackQuery(chats=chat_entity))
-    await client.run_until_disconnected()
 
-async def listen_private(client, args):
-    logger.info("Listening for all incoming private messages... Press Ctrl+C to stop.")
-    client.add_event_handler(
-        lambda event: message_event_handler(event, args),
-        events.NewMessage(incoming=True, func=lambda e: e.is_private)
-    )
-    client.add_event_handler(
-        lambda event: message_event_handler(event, args),
-        events.MessageEdited(func=lambda e: e.is_private)
-    )
-    client.add_event_handler(
-        lambda event: message_deleted_handler(event, args),
-        events.MessageDeleted()
-    )
-    if args.bot_token:
-        client.add_event_handler(
-            lambda event: callback_query_handler(event, args),
-            CallbackQuery(func=lambda e: e.is_private)
-        )
-    await client.run_until_disconnected()
+async def listen(client, args):
+    chats = [parse_chat_id(c) for c in args.chat] if args.chat else None
 
-async def listen_all(client, args):
-    logger.info("Listening for all incoming messages from every chat... Press Ctrl+C to stop.")
-    client.add_event_handler(
-        lambda event: message_event_handler(event, args),
-        events.NewMessage()
+    # func= predicate for listener-only filters
+    predicates = []
+    if getattr(args, 'private_only', False):
+        predicates.append(lambda e: e.is_private)
+    if getattr(args, 'mentioned_only', False):
+        predicates.append(lambda e: e.mentioned)
+    func = (lambda e: all(p(e) for p in predicates)) if predicates else None
+
+    msg_kwargs = dict(
+        chats=chats,
+        incoming=True if args.incoming_only else None,
+        outgoing=True if args.outgoing_only else None,
+        from_users=args.from_user or None,
+        forwards=True if args.forwarded_only else None,
+        pattern=args.pattern,
+        func=func,
     )
+
     client.add_event_handler(
-        lambda event: message_event_handler(event, args),
-        events.MessageEdited()
-    )
+        lambda e: message_event_handler(e, args),
+        events.NewMessage(**msg_kwargs))
     client.add_event_handler(
-        lambda event: message_deleted_handler(event, args),
-        events.MessageDeleted()
-    )
-    if args.bot_token:
+        lambda e: message_event_handler(e, args),
+        events.MessageEdited(**msg_kwargs))
+    client.add_event_handler(
+        lambda e: message_deleted_handler(e, args),
+        events.MessageDeleted(chats=chats))
+
+    if args.bot:
         client.add_event_handler(
-            lambda event: callback_query_handler(event, args),
-            CallbackQuery()
-        )
+            lambda e: callback_query_handler(e, args),
+            CallbackQuery(chats=chats))
+
     await client.run_until_disconnected()

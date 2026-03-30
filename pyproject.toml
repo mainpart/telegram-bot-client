@@ -1,8 +1,14 @@
 [project]
-name = "telegram-mcp"
+name = "telegram-client"
 version = "0.1.0"
+description = "CLI and real-time listener for Telegram via user account"
 requires-python = ">=3.11"
-dependencies = ["telethon>=1.28", "PyYAML>=6.0", "mcp>=1.7"]
+dependencies = ["telethon>=1.28", "PyYAML>=6.0"]
+
+[project.optional-dependencies]
+mcp = ["mcp>=1.7"]
 
 [project.scripts]
-telegram_mcp = "telegram_mcp:main"
+telegram-cli = "telegram_cli:main"
+telegram-listen = "telegram_listen:main"
+telegram-mcp = "telegram_mcp:main"
