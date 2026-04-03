@@ -24,6 +24,11 @@ ttt.code-workspace
 *.pyc
 *.pyo
 
+# Build artifacts
+dist/
+build/
+*.egg-info/
+
 # IDE
 .cursor/
 .vscode/
